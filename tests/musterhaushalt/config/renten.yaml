@@ -1,0 +1,44 @@
+renten:
+  - id: grv
+    name: Gesetzliche Rente
+    art: rente
+    kaufkraft: heute
+    cents: 180000
+    stand: {M-2}-01
+    notiz: Renteninformation, heutige Kaufkraft.
+  - id: police-a
+    name: Fondspolice A
+    art: kapital
+    kaufkraft: heute
+    cents: 9000000
+    ab: 2050-08
+    konto: police-a
+    stand: null
+    kosten_pa: 0.01
+    beitrag: vers-police-a
+    pruefwert: {satz: 0.06, cents: 9500000, zum: 2050-08}
+    notiz: |-
+      Policenwert plus Beitrag, vorsichtig verzinst.
+
+      Kosten und Pruefwert stehen so in der Standmitteilung.
+    notiz_vom: '{M-1}-15'
+  - id: police-b
+    name: Kapitalpolice B
+    art: kapital
+    kaufkraft: heute
+    cents: 2500000
+    ab: 2040-06
+    konto: police-b
+    stand: null
+    kosten_pa: 0.005
+    notiz: Ablaufleistung laut Standmitteilung.
+  - id: betriebliche-av
+    name: Betriebliche AV
+    art: kapital
+    kaufkraft: nominal
+    cents: 20000000
+    ab: 2055-08
+    pruefwert: {cents: 30000000, zum: 2055-08}
+    stand_cents: 2000000
+    stand_wert: '{M-1}-01'
+    beitrag_ag_cents: 240000

@@ -1,0 +1,5 @@
+zinssaetze:
+  tagesgeld:
+    - ab: '{M-2}'
+      bis: '{M+4}'
+      satz: 0.035

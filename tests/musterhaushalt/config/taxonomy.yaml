@@ -1,0 +1,260 @@
+management:
+  einkommen:
+    name: Einkommen
+    kind: income
+    children:
+      gehalt:            Gehalt
+      gehalt-nebentaetig: Gehalt Nebentätigkeit
+      dividende:         Dividende
+      zinsen:            Zinsen
+      cashback:          Cashback & Boni
+      schenkung:         Schenkung
+      sonstiges:         Sonstige Einnahmen
+
+  wohnen:
+    name: Wohnen
+    kind: expense
+    children:
+      miete:        {name: Miete, fix: true}
+      nebenkosten:  {name: Nebenkosten, fix: true}
+      strom:        {name: Strom, fix: true}
+      heizung:      {name: Heizung, fix: true}
+      internet:     {name: Internet, fix: true}
+      gez:          {name: Rundfunkbeitrag, fix: true}
+      umzug:        {name: Umzug, tax: privat/nicht-abzugsfaehig}
+      telefon:      Telefon
+
+  lebensmittel:
+    name: Lebensmittel
+    kind: expense
+    children:
+      supermarkt:  Lebensmittel
+
+  gastronomie:
+    name: Gastronomie
+    kind: expense
+    children:
+      restaurant:   Restaurant, Café & Lieferdienst
+
+  mobilitaet:
+    name: Mobilität
+    kind: expense
+    children:
+      kraftstoff:       Kraftstoff
+      kfz-versicherung: {name: KFZ-Versicherung, fix: true}
+      kfz-wartung:      KFZ-Wartung & Reparatur
+      kfz-steuer:       {name: KFZ-Steuer, fix: true}
+      kfz-strafen:      KFZ-Strafen & Bußgelder
+      kfz-finanzierung: {name: KFZ-Finanzierung / Leasing, fix: true}
+      fahrrad:          Fahrrad
+      fahrrad-beruflich: {name: Fahrrad beruflich, tax: anlage_n/arbeitsmittel}
+      bahn-privat:      Bahn & ÖPNV privat
+      bahn-beruflich:   {name: Bahn & ÖPNV beruflich, tax: anlage_n/fahrtkosten}
+      parken:           Parken & Maut
+      parken-beruflich: {name: Parken beruflich, tax: anlage_n/fahrtkosten}
+
+  bildung:
+    name: Bildung
+    kind: expense
+    children:
+      studiengebuehren: {name: Studiengebühren, tax: anlage_n/fortbildung}
+      lernmittel:       {name: Lernmittel & Literatur, tax: anlage_n/arbeitsmittel}
+
+  reisen:
+    name: Reisen
+    kind: expense
+    children:
+      reise-privat:    Reise privat
+      reise-beruflich: {name: Reise beruflich, tax: anlage_n/fahrtkosten}
+
+  konsum:
+    name: Konsum
+    kind: expense
+    children:
+      kleidung:    Kleidung
+      elektronik:  Elektronik
+      gaming:      Gaming
+      moebel:      Möbel
+      drogerie:    Drogerie
+      medien:      Bücher & Medien
+      event:       Events, Kino & Konzerte
+      geschenke:   Geschenke
+      fitness:     Fitness & Sport
+      sonstiges:   Sonstiges
+
+  gesundheit:
+    name: Gesundheit
+    kind: expense
+    children:
+      arzt:        {name: Arzt,        tax: sonderausgaben/krankheitskosten}
+      zahnarzt:    {name: Zahnarzt,    tax: sonderausgaben/krankheitskosten}
+      medikamente: {name: Medikamente, tax: sonderausgaben/krankheitskosten}
+      optik:       {name: Optik,       tax: sonderausgaben/krankheitskosten}
+
+  versicherung:
+    name: Versicherung
+    kind: expense
+    fix: true
+    children:
+      bu:            BU
+      phv:           PHV
+      hausrat:       Hausratversicherung
+      pkv:           PKV
+      risiko-lv:     Risiko-Lebensversicherung
+      pkv-pflege:    Pflegeversicherung
+      rente:         Rente
+      reise:         Reiseversicherung
+      rechtsschutz:  Rechtsschutz
+
+  abo:
+    name: Abo
+    kind: expense
+    fix: true
+    children:
+      mobilfunk:        Mobilfunk
+      audio-streaming:  Audio-Streaming
+      video-streaming:  Video-Streaming
+      cloud:            Cloud-Speicher
+      ki:               {name: KI-Dienste, tax: anlage_n/arbeitsmittel}
+      office:           {name: Office & Produktivität, tax: anlage_n/arbeitsmittel}
+      steuersoftware:   Steuersoftware
+      sport:            Sport & Verein
+      zeitung:          Zeitung & Magazine
+      spende:           Spenden
+      sonstiges:        Sonstige Abos
+
+  immobilie:
+    name: Immobilie
+    kind: expense
+    children:
+      mieteinnahme:    {name: Mieteinnahme, tax: anlage_v/mieteinnahmen}
+      nebenkosten:     {name: Nebenkosten, tax: anlage_v/nebenkosten}
+      hausverwaltung:  {name: Hausverwaltung, tax: anlage_v/hausverwaltung}
+      grundsteuer:     {name: Grundsteuer, tax: anlage_v/grundsteuer, fix: true}
+      instandhaltung:  {name: Instandhaltung, tax: anlage_v/erhaltungsaufwand}
+      kaufnebenkosten: {name: Kaufnebenkosten, einmalig: true}
+      sonstiges:       {name: Sonstiges, tax: anlage_v/sonstige}
+
+  kredit:
+    name: Kredit
+    kind: expense
+    children:
+      zinsen:            {name: Zinsen, fix: true}
+      tilgung:           {name: Tilgung, fix: true}
+      sondertilgung:     Sondertilgung
+      bereitstellungszins: Bereitstellungszins
+      gebuehren:         Gebühren
+
+  investment:
+    name: Investment
+    kind: neutral
+    children:
+      wertpapier:     Wertpapier
+      krypto:         Krypto
+
+  steuern:
+    name: Steuern
+    kind: expense
+    children:
+      einkommensteuer:    Einkommensteuer
+      kapitalertragsteuer: Kapitalertragsteuer & Soli
+
+  familie:
+    name: Familie & Partnerschaft
+    kind: expense
+    children:
+      fixkosten-partner:  {name: Fixkosten Partner, fix: true}
+      gemeinschaftskonto: Gemeinschaftskonto
+      eltern:             Eltern
+      katze:              Katze
+      unterstuetzung:     Unterstützung
+
+  transfer:
+    name: Transfer
+    kind: transfer
+    children:
+      eigenkonto: Zwischen eigenen Konten
+      extern:     An externes eigenes Konto
+
+  sonstiges:
+    name: Sonstiges
+    kind: expense
+    children:
+      gebuehren:       Bankgebühren
+      bargeld:         Bargeldabhebung
+      nicht-zugeordnet: Nicht zugeordnet
+
+tax:
+  privat:
+    name: Privat / nicht abzugsfähig
+    anlage: null
+    children:
+      nicht-abzugsfaehig: {name: Nicht abzugsfähig, deductible: false}
+
+  anlage_n:
+    name: Anlage N - Werbungskosten
+    anlage: N
+    children:
+      werbungskosten:  {name: Werbungskosten (allgemein), deductible: true}
+      telefonkosten:   {name: Telefonkosten, deductible: true}
+      internetkosten:  {name: Internetkosten, deductible: true}
+      arbeitsmittel:   {name: Arbeitsmittel, deductible: true}
+      fortbildung:     {name: Fortbildung, deductible: true}
+      fahrtkosten:     {name: Fahrtkosten / Entfernungspauschale, deductible: true}
+      berufsverband:   {name: Beiträge zu Berufsverbänden, deductible: true}
+      bewerbung:       {name: Bewerbungskosten, deductible: true}
+      arbeitszimmer:   {name: Häusliches Arbeitszimmer, deductible: true}
+      umzugskosten:    {name: Umzugskosten (beruflich), deductible: true}
+
+  anlage_v:
+    name: Anlage V - Vermietung und Verpachtung
+    anlage: V
+    children:
+      mieteinnahmen:       {name: Mieteinnahmen, deductible: false, property: true}
+      umlagen:             {name: Umlagen / NK-Vorauszahlung, deductible: false, property: true}
+      zinsen:              {name: Zinsen, deductible: true, property: true}
+      erhaltungsaufwand:   {name: Erhaltungsaufwendungen, deductible: true, property: true}
+      hausverwaltung:      {name: Hausverwaltung, deductible: true, property: true}
+      grundsteuer:         {name: Grundsteuer, deductible: true, property: true}
+      nebenkosten:         {name: Nebenkosten, deductible: true, property: true}
+      versicherung:        {name: Versicherungen, deductible: true, property: true}
+      afa:                 {name: AfA / Abschreibung, deductible: true, property: true}
+      sonstige:            {name: Sonstige Werbungskosten, deductible: true, property: true}
+      herstellungskosten:  {name: Anschaffungsnahe Herstellungskosten, deductible: false, property: true}
+
+  anlage_kap:
+    name: Anlage KAP - Kapitalerträge
+    anlage: KAP
+    children:
+      kapitalertraege:  {name: Kapitalerträge, deductible: false}
+      kest:             {name: Kapitalertragsteuer, deductible: false}
+      soli:             {name: Solidaritätszuschlag, deductible: false}
+      kist:             {name: Kirchensteuer, deductible: false}
+      verluste:         {name: Verluste, deductible: false}
+
+  vorsorge:
+    name: Anlage Vorsorgeaufwand
+    anlage: VORSORGE
+    children:
+      kranken-pflege: {name: Kranken- und Pflegeversicherung, deductible: true}
+      bu:             {name: Berufsunfähigkeitsversicherung, deductible: true}
+      risiko-lv:      {name: Risiko-Lebensversicherung, deductible: true}
+      altersvorsorge: {name: Altersvorsorge (Rürup / Rente), deductible: true}
+      haftpflicht:    {name: Haftpflicht- und Unfallversicherung, deductible: true}
+
+  sonderausgaben:
+    name: Sonderausgaben und außergewöhnliche Belastungen
+    anlage: SO
+    children:
+      spenden:            {name: Spenden, deductible: true}
+      krankheitskosten:   {name: Krankheitskosten, deductible: true}
+      haushaltsnahe:      {name: Haushaltsnahe Dienstleistungen, deductible: true}
+      handwerkerleistung: {name: Handwerkerleistungen, deductible: true}
+      ausbildungskosten:  {name: Ausbildungskosten (Erstausbildung), deductible: true}
+
+  paragraf_23:
+    name: §23 EStG - Private Veräußerungsgeschäfte
+    anlage: SO
+    children:
+      krypto:     {name: Krypto-Veräußerung, deductible: false}
+      immobilie:  {name: Immobilienveräußerung, deductible: false, property: true}

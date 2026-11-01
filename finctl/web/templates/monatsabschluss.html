@@ -1,0 +1,599 @@
+{% extends "base.html" %}{% block n_abschluss %}on{% endblock %}
+{% block title %}Monatsabschluss{% endblock %}
+{% block body %}
+<h1>Monatsabschluss
+  <span class="muted zusatz">— {{ monat_name }} {{ jahr }},
+    {% if offen %}<strong class="neg">{{ offen }} von {{ gesamt }} offen</strong>
+    {%- else %}<strong class="pos">alles aktuell</strong>{% endif %}</span></h1>
+
+{# Nichts anzuklicken. Ein Haken waere eine Behauptung ueber die Daten, die
+   neben den Daten liegt und falsch werden kann, ohne dass es auffaellt --
+   abgehakt und trotzdem veraltet ist genau der Zustand, den diese Seite
+   verhindern soll. Jede Zeile liest deshalb ihren eigenen Beleg. #}
+
+{# Der erste Start endet hier, nicht auf einer Assistentenseite: Eine
+   Umleitung steht beim zweiten Mal im Weg, ein Hinweis verschwindet von
+   selbst, sobald die drei Fragen beantwortet sind. #}
+{% if einrichtung_offen %}
+<div class="note bad">Die Einrichtung ist noch nicht fertig —
+  {{ einrichtung_offen }} von 3 Fragen offen.
+  <a class="plain" href="/einrichtung">Einrichtung öffnen →</a></div>
+{% endif %}
+
+{% include "_ops.html" %}
+
+{# Die Kacheln stehen hier, weil man diese Seite am Ersten ohnehin oeffnet:
+   "wie steht es" gleich neben "was ist zu tun". #}
+{% set k = kacheln %}
+{% if k.ungleich %}<div class="note bad">{{ k.ungleich }} Split-Ungleichgewichte — das ist ein Fehler, keine Warnung.</div>{% endif %}
+{% for g in k.luecken %}<div class="note bad">Lücke auf {{ g.account_id }}: {{ g.after }} → {{ g.before }},
+  {{ g.delta_cents|euro }} ungeklärt. Vermutlich fehlt ein Auszug.</div>{% endfor %}
+<div class="cards">
+  {# Jede Kachel fuehrt zur Liste, aus der ihre Zahl besteht, und dort steht
+     dieselbe Zahl (kachel-fuehrt-zur-liste). #}
+  {% set vorjahr = '/rueckblick?ansicht=vorjahr#' %}
+  <a class="card" href="{{ vorjahr }}einnahmen"><div class="k">Einnahmen {{ k.jahr }}</div>
+    <div class="v pos">{{ k.einnahmen|euro }}</div>
+    <div class="muted klein">davon Gehalt <span class="{{ k.gehalt|vz }}">{{ k.gehalt|euro }}</span>
+      {% if k.einnahmen %}({{ '%.0f'|format(100.0 * k.gehalt / k.einnahmen) }} %){% endif %}</div></a>
+  <a class="card" href="{{ vorjahr }}ausgaben"><div class="k">Ausgaben {{ k.jahr }}</div>
+    <div class="v neg">{{ k.ausgaben|euro }}</div>
+    <div class="muted klein">
+      {% if k.einnahmen %}{{ '%.0f'|format(100.0 * (-k.ausgaben) / k.einnahmen) }} % der Einnahmen{% endif %}
+      {% if k.gehalt %}· {{ '%.0f'|format(100.0 * (-k.ausgaben) / k.gehalt) }} % vom Gehalt{% endif %}</div></a>
+  <a class="card" href="{{ vorjahr }}saldo"><div class="k">Saldo {{ k.jahr }}</div>
+    <div class="v {{ (k.einnahmen + k.ausgaben)|vz }}">{{ (k.einnahmen + k.ausgaben)|euro }}</div>
+    <div class="muted klein">ohne Investments und einmalige Objektkosten</div></a>
+  {% set ob = ohne_objekt %}
+  <a class="card" href="/konten#ohne-objekt"><div class="k">Cashflow ohne {{ ob.label }}{% if ob.letzter %} · {{ ob.letzter.monat.strftime('%Y-%m') }}{% endif %}</div>
+    {% if ob.letzter %}
+    <div class="v {{ 'pos' if ob.letzter.cents >= ob.ziel_cents else 'neg' }}">{{ ob.letzter.cents|euro }}</div>
+    {% else %}<div class="v muted">—</div>{% endif %}
+    <div class="muted klein">Prognose Ø <span class="{{ (ob.schnitt_prognose_cents or 0)|vz }}">{{ (ob.schnitt_prognose_cents or 0)|euro }}</span></div></a>
+  {# Zwei Listen, zwei Links: die Kachel selbst fuehrt nirgends hin. #}
+  <div class="card"><div class="k">Transaktionen offen</div>
+    <div class="v">{{ k.review + k.flagged }}</div>
+    <div class="muted klein"><a class="plain" href="/transactions?ansicht=offen">{{ k.review }} zuordnen →</a>
+      · <a class="plain" href="/transactions?ansicht=aufteilen">{{ k.flagged }} aufteilen →</a></div></div>
+  {% if fristen_an %}
+  <a class="card" href="#fristen"><div class="k">Bald fällig</div>
+    <div class="v {{ 'neg' if fristen_bald }}">{{ fristen_bald|length }}</div>
+    <div class="muted klein">{% if fristen_bald %}zuerst {{ fristen_bald[0].datum }}
+      {%- elif naechste_frist %}nächste ab {{ naechste_frist.ab }}{% else %}nichts in Sicht{% endif %}</div></a>
+  {% endif %}
+</div>
+
+{# Je Position eine Zeile: ob sie aktuell ist, ihr Wert, die Notiz. Belegt
+   ist Text, getippt ein Feld -- ein Stand wird dort gepflegt, wo man
+   bemerkt, dass er alt ist. #}
+<style>
+  table.staende{table-layout:fixed}
+  table.staende col.haken{width:34px}
+  /* Feste Breiten knapp halten: was uebrig bleibt, bekommt die Notiz. */
+  table.staende col.pos{width:12rem}
+  table.staende col.wert,table.staende col.gewinn{width:8rem}
+  table.staende col.stand{width:9rem}
+  table.staende col.tun{width:7.5rem}
+  table.staende td{vertical-align:middle}
+  table.staende td.haken{text-align:center;font-size:15px}
+  table.staende input,table.staende textarea{width:100%;box-sizing:border-box}
+  table.staende input.betrag{text-align:right}
+  table.staende input.alt{color:var(--bad)}
+  /* Knoepfe untereinander, die Meldung darunter: so passt alles in eine schmale Spalte. */
+  /* Oben bleiben: Verliert die Notiz den Fokus, schrumpft die Zeile, und ein mittig
+     stehender Knopf rutscht dabei unter dem Zeiger weg, bevor der Klick ankommt. */
+  table.staende td.tun{vertical-align:top}
+  table.staende td.tun button{display:block;width:100%}
+  table.staende td.tun button[hidden]{display:none}
+  table.staende td.tun button+button{margin-top:.3rem}
+  table.staende td.tun .meldung{display:block}
+  /* Der Rueckkaufswert einer Police: eine kleinere Unterzeile unter ihrer Zeile. */
+  table.staende tr.unterzeile td{padding-top:0;border-top:0}
+  table.staende tr.unterzeile .rueckkauf{display:flex;flex-wrap:wrap;gap:.3rem .8rem;align-items:center}
+  table.staende tr.unterzeile label{display:flex;align-items:center;gap:.35rem;white-space:nowrap}
+  table.staende tr.unterzeile input{width:8rem}
+  /* Die Notiz liest sich als Text und wird erst beim Zeigen zum Feld. */
+  table.staende .still{border-color:transparent;background:transparent;resize:none;
+    overflow:hidden;font:inherit;line-height:1.35}
+  /* Zwei Zeilen; eine laengere Begruendung blendet aus und oeffnet sich beim Klick. */
+  table.staende .still{max-height:calc(2.7em + .7rem)}
+  table.staende .still.lang{-webkit-mask-image:linear-gradient(#000 55%,transparent);
+    mask-image:linear-gradient(#000 55%,transparent)}
+  table.staende .still:focus{max-height:none;-webkit-mask-image:none;mask-image:none}
+  table.staende .still:hover,table.staende .still:focus{
+    border-color:var(--feldrand);background:var(--panel)}
+  @media (max-width:700px){
+    table.staende,table.staende tbody{display:block}
+    table.staende colgroup,table.staende tr.kopf{display:none}
+    table.staende tr{display:grid;grid-template-columns:28px 1fr 8.5rem;
+      column-gap:.4rem;border-bottom:1px solid var(--line);padding:.35rem 0}
+    table.staende td{border:0;padding:.15rem 0}
+    table.staende td.stand{grid-column:2}
+    table.staende td.tun{grid-column:3;grid-row:2}
+    table.staende td.notiz{grid-column:2 / -1}
+    table.staende tr.unterzeile td.rueckkauf-zelle{grid-column:2 / -1}
+    /* Mit Gewinn: Stand und Gewinn teilen sich die zweite Zeile, die Knoepfe ruecken unter die Notiz. */
+    table.staende.mit-gewinn td.stand{grid-row:2}
+    table.staende.mit-gewinn td.gewinn{grid-column:3;grid-row:2}
+    table.staende.mit-gewinn td.notiz{grid-row:3}
+    table.staende.mit-gewinn td.tun{grid-row:4}
+  }
+</style>
+{% set bearbeiten = bestand is not none %}
+{% for g in staende %}
+{% set konten = g.id == 'konten' %}
+{# "davon Gewinn" als eigene Spalte, nur wo ein Depot in der Tabelle steht. #}
+{% set mit_gewinn = g.zeilen|selectattr('depot')|list|length > 0 %}
+<h2 id="{{ g.id }}">{{ g.titel }}
+  <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">
+    — {{ g.erledigt }} von {{ g.zeilen|length }} aktuell
+    {%- if g.id != 'renten' %} · <span class="{{ g.summe|vz }}">{{ g.summe|euro }}</span>{% endif %}
+    {%- if g.ohne_wert %} · {{ g.ohne_wert }} ohne Wert{% endif %}</span></h2>
+<div class="wrap"><table class="staende{{ ' mit-gewinn' if mit_gewinn }}">
+  <colgroup><col class="haken"><col class="pos"><col class="wert">
+    {%- if mit_gewinn %}<col class="gewinn">{% endif %}<col class="stand">
+    <col class="notiz"><col class="tun"></colgroup>
+  <tr class="kopf"><th></th><th>{{ 'Konto' if konten else 'Position' }}</th>
+    <th class="num">{{ ('Saldo ' ~ g.stichtag) if konten and g.stichtag else 'Wert' }}</th>
+    {%- if mit_gewinn %}<th class="num" title="Wie in der Depot-App: Wert minus Kaufpreis. Leer: unbekannt">davon Gewinn</th>{% endif %}
+    <th>{{ 'Beleg' if konten else 'Stand' }}</th><th>Notiz</th><th></th></tr>
+  {% for z in g.zeilen %}{% set p = z.p %}
+  {# Renten werden auf /renten gepflegt; hier steht nur, ob das Schreiben aktuell ist. #}
+  {% set feld = bearbeiten and not z.auszug and g.id != 'renten' %}
+  {# Eine Rente kann wie ihre Police heissen: eigener Praefix fuer die id. #}
+  <tr id="pos-{{ 'rente-' if g.id == 'renten' }}{{ z.key|e }}" data-key="{{ z.key|e }}"{% if z.api %} data-api="{{ z.api }}"{% endif %}
+      data-cents="{{ z.cents if z.cents is not none }}">
+    <td class="haken">{% if p.erledigt %}<span class="pos" title="{{ g.erklaerung }}">✓</span>
+      {%- else %}<span class="neg" title="Veraltet. {{ g.erklaerung }}">○</span>{% endif %}</td>
+    {# Konten als Kennung (konten-als-kennung), der Anzeigename als Titel. #}
+    <td>{% if konten %}<span title="{{ p.name }}">{{ z.key }}</span>{% else %}{{ p.name }}{% endif %}
+      {%- if g.id == 'renten' %}<br><span class="muted fein">{{ p.zusatz }}</span>
+      {%- if z.ab %}<br><span class="muted fein">Bezug ab {{ z.ab }}</span>{% endif %}
+      {%- if z.kosten_hoch %} <span class="neg" title="Effektivkosten über deiner Schwelle">⚠</span>{% endif %}{% endif %}</td>
+    {% if feld %}
+    <td class="num"><input class="betrag" data-feld="wert" value="{{ z.cents|betrag }}"
+        placeholder="unbekannt" oninput="standGeaendert(this)"
+        onkeydown="standTaste(event)"></td>
+    {%- if mit_gewinn %}
+    <td class="num gewinn">{% if z.depot %}<input class="betrag" data-feld="gewinn"
+        value="{{ z.gewinn|betrag if z.gewinn is not none else '' }}" placeholder="Gewinn?"
+        aria-label="davon Gewinn" oninput="standGeaendert(this)" onkeydown="standTaste(event)">{% endif %}</td>
+    {%- endif %}
+    <td class="stand"><input data-feld="stand" value="{{ z.as_of }}" placeholder="2026-01-01"
+        class="{{ 'alt' if not p.erledigt }}" oninput="standGeaendert(this)"
+        onkeydown="standTaste(event)"></td>
+    {% else %}
+    <td class="num {{ z.cents|vz }}">{{ z.cents|euro if z.cents is not none else '—' }}</td>
+    {%- if mit_gewinn %}
+    <td class="num gewinn">{{ z.gewinn|euro if z.depot and z.gewinn is not none }}</td>
+    {%- endif %}
+    <td class="stand {{ 'neg' if not p.erledigt }}">{{ p.beleg or p.hinweis }}
+      {%- if p.zusatz and g.id != 'renten' %} <span class="muted fein">· {{ p.zusatz }}</span>{% endif %}</td>
+    {% endif %}
+    <td class="notiz">{% if bearbeiten and z.notiz and g.id != 'renten' %}<textarea class="still" data-feld="notiz" rows="1"
+        placeholder="Notiz — woher, wem gehört es?"
+        oninput="standGeaendert(this)" onkeydown="standTaste(event)">{{ z.note }}</textarea>
+      {%- else %}<span class="muted">{{ z.note }}</span>{% endif %}</td>
+    <td class="tun">{% if g.id == 'renten' %}{% if seite_an("/renten") %}<a class="plain" href="/renten#rente-{{ z.key|e }}">pflegen →</a>{% endif %}
+      {%- elif bearbeiten %}
+      <button class="ghost" data-knopf onclick="standAblegen(this)"
+        {%- if z.auszug or p.erledigt or z.cents is none %} hidden{% endif %}
+        title="Denselben Wert mit heutigem Datum ablegen">unverändert</button>
+      <span class="meldung fein"></span>{% endif %}</td>
+  </tr>
+  {% if feld and g.id == 'jaehrlich' %}{% set r = z.rueckkauf %}
+  <tr class="unterzeile" data-zu="{{ z.key|e }}"><td></td>
+    <td colspan="{{ 5 if mit_gewinn else 4 }}" class="rueckkauf-zelle"><div class="rueckkauf">
+      <label class="muted klein">Rückkaufswert <input class="betrag" data-feld="rueckkauf"
+        value="{{ r.cents|betrag if r }}" placeholder="unbekannt" oninput="standGeaendert(this)"
+        onkeydown="standTaste(event)"></label>
+      <label class="muted klein">eingezahlt <input class="betrag" data-feld="eingezahlt"
+        value="{{ r.eingezahlt_cents|betrag if r and r.eingezahlt_cents is not none }}"
+        placeholder="unbekannt" oninput="standGeaendert(this)" onkeydown="standTaste(event)"></label>
+      <label class="muted klein">Policenwert laut Mitteilung <input class="betrag" data-feld="rpolice"
+        value="{{ r.policenwert_cents|betrag if r and r.policenwert_cents is not none }}"
+        placeholder="wie oben" title="Leer: der Wert dieser Zeile, wenn beide denselben Stand haben"
+        oninput="standGeaendert(this)" onkeydown="standTaste(event)"></label>
+      <label class="muted klein">Stand <input data-feld="rstand" value="{{ r.as_of if r }}"
+        placeholder="2026-01-01" oninput="standGeaendert(this)"
+        onkeydown="standTaste(event)"></label></div></td>
+    <td></td></tr>
+  {% endif %}
+  {% endfor %}
+</table></div>
+{% endfor %}
+
+
+{% if bestand and bestand.obligations %}
+{% set eine = bestand.obligations|length == 1 %}
+<div class="note">Noch {{ bestand.obligations|length }} Verbindlichkeit{{ '' if eine else 'en' }}
+  aus <code>balances.yaml</code> {{ 'zieht' if eine else 'ziehen' }} vom Vermögen ab, zusammen
+  {{ bestand.obligations|sum(attribute='cents')|euro }}. In der Planung als Verpflichtung
+  eintragen, dann hier streichen:
+  {% for o in bestand.obligations %}<button class="ghost" style="margin-left:.4rem"
+    onclick="verbindlichkeitStreichen('{{ o.kennung }}', '{{ o.name|e }}')">{{ o.name }} streichen</button>{% endfor %}
+  <span id="vm-streichen" class="muted fein"></span></div>
+{% endif %}
+
+<script>
+// Felder einer Position stehen in ihrer Zeile und, bei einer Police, in der Unterzeile darunter.
+function standFeld(tr, name){
+  const unter = document.querySelector('tr.unterzeile[data-zu="' + tr.dataset.key + '"]');
+  return tr.querySelector('[data-feld="' + name + '"]')
+    || (unter && unter.querySelector('[data-feld="' + name + '"]'));
+}
+function standZeile(el){
+  const tr = el.closest('tr');
+  return tr.classList.contains('unterzeile') ? document.getElementById('pos-' + tr.dataset.zu) : tr;
+}
+// Das oertliche Datum: toISOString waere UTC und kurz nach Mitternacht gestern.
+function standHeute(){ return new Date().toLocaleDateString('sv'); }
+function standSagen(tr, text, art){
+  const m = tr.querySelector('.meldung');
+  m.textContent = text;
+  m.className = 'meldung fein ' + (art === 'pos' ? 'pos' : (art === 'bad' ? 'neg' : 'muted'));
+}
+// Wer tippt, speichert: derselbe Knopf heisst dann Speichern. Ein neuer Wert
+// zieht den Stand auf heute, solange der nicht selbst gesetzt wurde.
+// Eine lange Notiz bricht um, statt im Feld abgeschnitten zu stehen.
+function standHoehe(t){
+  t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px';
+  t.classList.toggle('lang', t.scrollHeight > t.clientHeight + 2);
+}
+document.querySelectorAll('table.staende textarea').forEach(standHoehe);
+function standGeaendert(el){
+  const tr = standZeile(el);
+  if (el.tagName === 'TEXTAREA') standHoehe(el);
+  const geaendert = new Set((tr.dataset.geaendert || '').split(' ').filter(Boolean));
+  geaendert.add(el.dataset.feld);
+  if (el.dataset.feld === 'wert'){
+    const d = standFeld(tr, 'stand');
+    if (d && !geaendert.has('stand')){ d.value = standHeute(); d.classList.remove('alt'); }
+  }
+  // Ein Rueckkaufswert gehoert meist zur selben Mitteilung wie der Policenwert: der Stand zieht mit.
+  if (el.dataset.feld === 'rueckkauf'){
+    const d = standFeld(tr, 'rstand'), s = standFeld(tr, 'stand');
+    if (d && s && !geaendert.has('rstand') && !d.value) d.value = s.value;
+  }
+  tr.dataset.geaendert = [...geaendert].join(' ');
+  const k = tr.querySelector('[data-knopf]');
+  k.hidden = false; k.textContent = 'Speichern'; k.title = '';
+}
+function standTaste(e){
+  if (e.key !== 'Enter') return;
+  // In der Notiz ist Enter ein Zeilenumbruch; gespeichert wird mit Strg oder Cmd dazu.
+  if (e.target.tagName === 'TEXTAREA' && !(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault(); standAblegen(standZeile(e.target).querySelector('[data-knopf]'));
+}
+// Nur was geaendert wurde, geht an den Server (nur-abweichungen-speichern).
+function standKoerper(tr){
+  const geaendert = (tr.dataset.geaendert || '').split(' ');
+  const body = {key: tr.dataset.key};
+  if (!tr.dataset.geaendert) return {...body, cents: Number(tr.dataset.cents), as_of: standHeute()};
+  if (geaendert.includes('wert') || geaendert.includes('stand')){
+    const w = standFeld(tr, 'wert');
+    const cents = centsAus(w.value);
+    if (cents === null){ w.classList.add('feld-fehlt'); return null; }
+    body.cents = cents;
+    body.as_of = standFeld(tr, 'stand').value.trim();
+  }
+  if (geaendert.includes('notiz')) body.note = standFeld(tr, 'notiz').value;
+  // Die vier Angaben der Mitteilung gehen zusammen; der Server liest die Betraege.
+  if (['rueckkauf', 'eingezahlt', 'rpolice', 'rstand'].some(f => geaendert.includes(f))){
+    body.rueckkauf_cents_text = standFeld(tr, 'rueckkauf').value;
+    body.eingezahlt_cents_text = standFeld(tr, 'eingezahlt').value;
+    body.rueckkauf_policenwert_cents_text = standFeld(tr, 'rpolice').value;
+    body.rueckkauf_as_of = standFeld(tr, 'rstand').value.trim();
+  }
+  if (geaendert.includes('ab')) body.ab = standFeld(tr, 'ab').value.trim();
+  if (geaendert.includes('gewinn')){
+    const g = standFeld(tr, 'gewinn');
+    const cents = g.value.trim() === '' ? '' : centsAus(g.value);
+    if (cents === null){ g.classList.add('feld-fehlt'); return null; }
+    body.gewinn_cents = cents;
+  }
+  return body;
+}
+async function standPost(tr, body){
+  try {
+    const r = await fetch(tr.dataset.api || '/api/bestand', {method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if (j.error){ standSagen(tr, 'Fehler: ' + j.error, 'bad'); return; }
+    standSagen(tr, 'gespeichert', 'pos');
+    tr.classList.add('gespeichert');
+    setTimeout(() => location.reload(), 900);
+  } catch(e){ standSagen(tr, 'Fehler: ' + e, 'bad'); }
+}
+function standAblegen(knopf){
+  const tr = knopf.closest('tr');
+  const body = standKoerper(tr);
+  if (!body){ standSagen(tr, 'keine Zahl', 'bad'); return; }
+  standPost(tr, body);
+}
+async function verbindlichkeitStreichen(kennung, name){
+  if (!confirm(name + ' aus dem Vermögen streichen? Die Notiz geht mit.')) return;
+  const box = document.getElementById('vm-streichen');
+  const r = await fetch('/api/verpflichtung', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({kennung: kennung, remove: true})});
+  const j = await r.json();
+  if (j.error){ box.textContent = 'Fehler: ' + j.error; box.className = 'neg fein'; return; }
+  location.reload();
+}
+</script>
+
+{% for schluessel, titel in gruppen %}
+{% set zeilen = posten|selectattr('gruppe', 'equalto', schluessel)|list %}
+{% if zeilen %}
+<h2>{{ titel }}
+  <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">
+    — {{ zeilen|length }} offen</span></h2>
+<div class="wrap"><table>
+  <tr><th style="width:34px"></th><th>Position</th><th>Was fehlt</th></tr>
+  {% for p in zeilen %}
+  <tr>
+    <td style="text-align:center;font-size:15px"><span class="neg">○</span></td>
+    <td>{% if p.ziel %}<a class="plain" href="{{ p.ziel }}">{{ p.name }}</a>
+        {%- else %}{{ p.name }}{% endif %}</td>
+    <td class="muted">{{ p.hinweis }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+{% endfor %}
+
+{% if wirkung %}
+{% set w = wirkung %}
+{# Gerechnet ist alles in forecast/wirkung.py; die Seite ordnet nur. #}
+{% macro tempozelle(zw) %}
+  {%- if zw.im_monatsmodell %}<td class="num muted">Monatsmodell</td>
+  {%- elif zw.aenderung is none %}<td class="num muted">—</td>
+  {%- else %}<td class="num"><strong class="{{ zw.aenderung|vz or 'muted' }}">{{ zw.aenderung|euro }}</strong>
+    {%- if zw.pct_heute is not none %}<div class="muted fein">{{ '%.0f'|format(zw.pct_vorher) }} % → {{ '%.0f'|format(zw.pct_heute) }} %</div>{% endif %}</td>{% endif %}
+{% endmacro %}
+{% macro monate(liste) %}
+  {%- for m in liste %}{{ m.monat.strftime('%Y-%m') }}: <span class="{{ m.cents|vz }}">{{ m.cents|euro }}</span>
+    · {{ m.buchungen }} {{ 'Buchung' if m.buchungen == 1 else 'Buchungen' }}{% if not loop.last %}<br>{% endif %}
+  {%- else %}—{% endfor %}
+{% endmacro %}
+<h2 id="wirkung">Wirkung auf deine Ziele
+  <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">
+    — Stichtag {{ w.stichtag }} gegen {{ w.davor }}, unter den heutigen Annahmen</span></h2>
+{% if w.abweichend %}
+<div class="note">Der Abschluss schließt {{ w.erwartet }}, die Auszüge reichen erst bis {{ w.stichtag }}:
+  Die Wirkung gilt für diesen Stichtag.</div>
+{% endif %}
+{% if w.satz %}
+<div class="note">{{ w.satz }}</div>
+{% else %}
+<style>
+  table.wirkung td.ziel{white-space:nowrap}
+  table.wirkung td.num{white-space:nowrap}
+  table.wirkung tr.panel h3{margin:.8rem 0 .3rem}
+  table.wirkung tr.panel h3:first-child{margin-top:0}
+  table.wirkung table.kategorien td{white-space:normal;vertical-align:top}
+  table.wirkung td.unter{padding:.1rem 0 .4rem 1.2rem}
+  /* Auf dem Telefon entfaellt der Bestand: Platz fuer die zwei Tempi, um die es hier geht. */
+  @media (max-width:700px){
+    table.wirkung .bestand{display:none}
+    table.wirkung th,table.wirkung td.ziel{white-space:normal}
+    table.wirkung>tbody>tr>th,table.wirkung>tbody>tr>td{padding-left:.4rem;padding-right:.4rem}
+    /* Ursachen untereinander: Name und Betrag in einer Zeile, die Herleitung darunter. */
+    table.wirkung table.ursachen colgroup,table.wirkung table.ursachen td.quelle{display:none}
+    table.wirkung table.ursachen,table.wirkung table.ursachen>tbody{display:block}
+    table.wirkung table.ursachen>tbody>tr{display:grid;grid-template-columns:1fr auto;
+      column-gap:.5rem;border-bottom:1px solid var(--line);padding:.25rem 0}
+    table.wirkung table.ursachen>tbody>tr>td{padding:.1rem 0}
+    table.wirkung table.ursachen td.herleitung{grid-column:1 / -1;grid-row:2}
+    table.wirkung table.ursachen td.unter{grid-column:1 / -1;padding-left:0}
+    /* Die Kategorien behalten ihre Spalten und scrollen im Kasten. */
+    table.wirkung table.kategorien{min-width:36rem}
+  }
+</style>
+{# data-sortable und data-resizable gesetzt: _resize.html laesst die Tabelle aus, ein
+   sortiertes Ziel liesse sein Panel zurueck. #}
+<div class="wrap"><table class="wirkung" data-sortable="1" data-resizable="1">
+  <tr><th>Ziel</th><th class="num bestand">Bestand</th>
+    <th class="num">{{ w.tempo.schnitt }}</th><th class="num">{{ w.tempo.juengst }}</th></tr>
+  {% for z in w.zeilen %}
+  {% set id = z.schnitt.ziel.goal_id %}
+  {% set klappt = z.schnitt.im_monatsmodell or z.schnitt.aenderung is not none or z.juengst.aenderung is not none %}
+  <tr{% if klappt %} class="klappbar" onclick="wirkungZeigen('{{ id|e }}')" style="cursor:pointer"{% endif %}>
+    <td class="ziel">{% if klappt %}<span class="pfeil" id="wa-{{ id|e }}">▸</span> {% endif %}{{ z.schnitt.ziel.name }}
+      <div class="muted fein">{{ ('Stichdatum ' ~ z.schnitt.ziel.due) if z.schnitt.ziel.due else 'ohne Stichdatum' }}</div></td>
+    <td class="num bestand"><strong class="{{ z.schnitt.balken_aenderung|vz or 'muted' }}"
+        title="Bestand heute gegen Bestand zum Stichtag davor">{{ z.schnitt.balken_aenderung|euro }}</strong></td>
+    {{ tempozelle(z.schnitt) }}{{ tempozelle(z.juengst) }}
+  </tr>
+  {% if klappt %}
+  <tr class="panel" id="wp-{{ id|e }}" hidden>
+    <td colspan="4">
+      {# Feste Breite, wie im Rechenweg der Hochrechnung. #}
+      <div style="position:sticky;left:0;width:min(100%, calc(100vw - 4rem))">
+      {% if z.schnitt.im_monatsmodell %}
+      <div class="note">Das Monatsmodell misst dieses Ziel: Sein Stichdatum liegt in der Prognose von
+        <a class="plain" href="/konten">Konten</a>. Dort steht, wie Klammern und Buchungen es bewegen. Eine Zerlegung
+        nach Ursachen gibt es nur für die Jahresrechnung.</div>
+      {% else %}
+      {% for zw in [z.schnitt, z.juengst] %}
+      {% if zw.aenderung is not none %}
+      <h3>{{ w.tempo['schnitt' if loop.first else 'juengst'] }}</h3>
+      <div class="wrap"><table class="detail ursachen" style="table-layout:fixed;width:100%">
+        <colgroup><col style="width:28%"><col style="width:7.5rem"><col><col style="width:7.5rem"></colgroup>
+        {% for u in zw.ursachen %}
+        <tr>
+          <td>{{ u.label }}</td>
+          <td class="quelle" style="white-space:nowrap"><span class="pill{{ ' eigen' if u.quelle == 'plan' }}" title="{{ quellen[u.quelle] }}">{{ u.quelle }}</span></td>
+          <td class="muted herleitung" style="white-space:normal">{{ u.herleitung }}
+            {# Zu "Der Monat" gehoeren die Hinweise unten. #}
+            {%- if u.label == 'Der Monat' and w.hinweise %} <a class="plain" href="#wirkung-monat">Hinweise zum Monat</a>{% endif %}</td>
+          <td class="num {{ u.cents|vz or 'muted' }}">{{ u.cents|euro }}</td>
+        </tr>
+        {% set kat = zw.kategorien.get(u.verweis) if u.verweis else none %}
+        {% if kat %}
+        <tr><td colspan="4" class="unter"><div class="wrap"><table class="detail kategorien" style="table-layout:fixed;width:100%">
+          <colgroup><col style="width:24%"><col style="width:6.5rem"><col style="width:6.5rem"><col><col></colgroup>
+          <tr class="muted"><td>Kategorie</td><td class="num">Jahreswert vorher</td><td class="num">nachher</td>
+            <td>aus dem Fenster gefallen</td><td>dazugekommen</td></tr>
+          {% for k in kat %}
+          <tr><td style="overflow-wrap:anywhere"><code>{{ k.kategorie or '(ohne Kategorie)' }}</code></td>
+            <td class="num {{ k.vorher|vz }}">{{ k.vorher|euro }}</td>
+            <td class="num {{ k.nachher|vz }}">{{ k.nachher|euro }}</td>
+            {% if k.reihen %}<td colspan="2" class="muted">{{ k.reihen|length }}
+              {{ 'Reihe' if k.reihen|length == 1 else 'Reihen' }} mit Takt bewegt, dazu der Rest</td>
+            {% else %}<td>{{ monate(k.heraus) }}</td><td>{{ monate(k.dazu) }}</td>{% endif %}</tr>
+          {% for r in k.reihen %}
+          <tr class="reihe"><td style="overflow-wrap:anywhere;padding-left:1rem"><code>{{ r.gegenpartei }}</code></td>
+            <td class="num {{ r.vorher|vz }}">{{ r.vorher|euro }}</td>
+            <td class="num {{ r.nachher|vz }}">{{ r.nachher|euro }}</td>
+            <td colspan="2" class="muted">{{ r.beschreibung }}</td></tr>
+          {% endfor %}
+          {% if k.reihen %}
+          <tr class="rest"><td style="padding-left:1rem" class="muted">Rest</td>
+            <td class="num {{ k.rest_vorher|vz }}">{{ k.rest_vorher|euro }}</td>
+            <td class="num {{ k.rest_nachher|vz }}">{{ k.rest_nachher|euro }}</td>
+            <td>{{ monate(k.heraus) }}</td><td>{{ monate(k.dazu) }}</td></tr>
+          {% endif %}
+          {% endfor %}
+        </table></div></td></tr>
+        {% endif %}
+        {% else %}
+        <tr><td colspan="4" class="muted">Keine Ursache bewegt dieses Ziel.</td></tr>
+        {% endfor %}
+        <tr><td colspan="3" style="padding-top:.5rem" class="muted">Wert zum Stichdatum {{ zw.ziel.due }}:
+            {{ zw.vorher|euro }} → {{ zw.heute|euro }}</td>
+          <td class="num {{ zw.aenderung|vz or 'muted' }}" style="padding-top:.5rem"><strong>{{ zw.aenderung|euro }}</strong></td></tr>
+      </table></div>
+      {% endif %}
+      {% endfor %}
+      {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% endif %}
+  {% endfor %}
+</table></div>
+
+{% if w.hinweise %}
+<h3 id="wirkung-monat">Der Monat
+  <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">
+    — {{ w.hinweise.monat.strftime('%Y-%m') }}, Hinweise in Euro des Monats</span></h3>
+<div class="wrap"><table data-sortable="1">
+  <tr><th>Prognose gegen Ist</th><th class="num">Prognose</th><th class="num">Ist</th><th class="num">Abweichung</th></tr>
+  {% for h in w.hinweis_zeilen %}
+  <tr><td>{{ h.label }}</td>
+    <td class="num {{ h.soll|vz }}">{{ h.soll|euro }}</td>
+    <td class="num {{ h.ist|vz }}">{{ h.ist|euro }}</td>
+    <td class="num {{ (h.delta or 0)|vz }}">{{ '—' if h.delta is none else h.delta|euro }}</td></tr>
+  {% endfor %}
+  {% set s = w.hinweis_summe %}
+  <tr><td><strong>{{ s.label }}</strong></td>
+    <td class="num {{ s.soll|vz }}"><strong>{{ s.soll|euro }}</strong></td>
+    <td class="num {{ s.ist|vz }}"><strong>{{ s.ist|euro }}</strong></td>
+    <td class="num {{ s.delta|vz }}"><strong>{{ s.delta|euro }}</strong></td></tr>
+</table></div>
+{% if w.hinweise.kurs %}
+{% set k = w.hinweise.kurs %}
+<div class="wrap"><table>
+  <tr><th>Depots</th><th class="num">Stand {{ w.davor }}</th><th class="num">Stand heute</th>
+    <th class="num">Änderung</th>
+    <th class="num" title="Geld ins Depot ist negativ, wie im Hauptbuch">Buchungen unter investment/</th>
+    <th class="num">Kursbewegung</th></tr>
+  <tr><td>Kursbewegung der Depots</td>
+    <td class="num">{{ k.stand_vorher|euro }}</td><td class="num">{{ k.stand_heute|euro }}</td>
+    <td class="num {{ k.aenderung|vz }}">{{ k.aenderung|euro }}</td>
+    <td class="num {{ k.buchungen_cents|vz }}">{{ k.buchungen_cents|euro }}</td>
+    <td class="num {{ k.kursbewegung|vz }}"><strong>{{ k.kursbewegung|euro }}</strong></td></tr>
+</table></div>
+{% endif %}
+<div class="note">Das sind Hinweise zum Monat, keine Teile der Wirkung: Die Wirkung läuft bis
+  zum Stichdatum des Ziels weiter.</div>
+{% if w.hinweise.gerechnet_gebucht %}
+<div class="note">Gebuchte Zinsen und Kapitalertragsteuer zählen hier als Ist; die Hochrechnung
+  rechnet beide selbst.</div>
+{% endif %}
+{% endif %}
+<script>
+function wirkungZeigen(id){
+  const panel = document.getElementById('wp-' + id), pfeil = document.getElementById('wa-' + id);
+  if (!panel) return;
+  panel.hidden = !panel.hidden;
+  if (pfeil) pfeil.textContent = panel.hidden ? '▸' : '▾';
+}
+</script>
+{% endif %}
+{% endif %}
+
+{% if fristen_an %}
+<h2 id="fristen">Bald fällig
+  <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">
+    — {{ fristen_bald|length }} von {{ fristen_zahl }}
+    {%- if fristen_zahl %} · <a class="plain" href="/fristen.ics" download
+      title="Je Frist ein Termin am Tag, ab dem sie bald fällig ist">alle in den Kalender</a>{% endif %}</span></h2>
+{% if fristen_bald %}
+<style>
+  table.fristen td.haken{width:34px;text-align:center;font-size:15px}
+  @media (max-width:700px){
+    table.fristen,table.fristen tbody{display:block}
+    table.fristen tr.kopf,table.fristen td.ab{display:none}
+    table.fristen tr{display:grid;grid-template-columns:28px 1fr auto;
+      column-gap:.4rem;border-bottom:1px solid var(--line);padding:.35rem .6rem .35rem 0}
+    table.fristen td{border:0;padding:.15rem 0}
+    table.fristen td.datum,table.fristen td.posten{grid-column:2}
+    table.fristen td.kal,table.fristen td.num{grid-column:3}
+    table.fristen td.datum,table.fristen td.kal{grid-row:1}
+    table.fristen td.tun{grid-column:2 / -1}
+  }
+</style>
+<div class="wrap"><table class="fristen">
+  <tr class="kopf"><th style="width:34px"></th><th style="width:7rem">Frist</th><th>Position</th>
+    <th class="num">Betrag</th><th>Zu tun</th><th style="width:7rem">bald ab</th><th></th></tr>
+  {% for f in fristen_bald %}
+  <tr>
+    <td class="haken"><span class="neg">○</span></td>
+    <td class="datum nobr">{{ f.datum }}</td>
+    <td class="posten"><a class="plain" href="{{ f.ziel }}">{{ f.name }}</a></td>
+    <td class="num {{ f.cents|vz }}">{{ f.cents|euro if f.cents is not none else '—' }}</td>
+    <td class="tun muted">{{ f.tun }}</td>
+    <td class="ab nobr muted">{{ f.ab }}</td>
+    <td class="kal nobr"><a class="plain" href="/fristen.ics?nur={{ f.uid|urlencode }}" download>Kalender</a></td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<div class="note">Nichts bald fällig.
+  {%- if naechste_frist %} Als Nächstes: {{ naechste_frist.name }}, bald fällig ab {{ naechste_frist.ab }}.{% endif %}</div>
+{% endif %}
+{% endif %}
+
+<h2>Ablauf</h2>
+<div class="wrap"><table>
+  {# Eine echte Kopfzeile, sonst erklaert der Sortierer die erste Datenzeile
+     dazu und haengt ihr Sortierpfeile an. #}
+  <tr><th style="width:34px"></th><th style="width:130px">Schritt</th><th>Stand</th></tr>
+  {% for s in schritte %}
+  <tr>
+    <td style="width:34px;text-align:center;font-size:15px">
+      {% if s.warnung %}<span class="neg">!</span>{% else %}<span class="muted">·</span>{% endif %}</td>
+    <td style="width:130px"><a class="plain" href="{{ s.ziel }}">{{ s.titel }}</a></td>
+    <td class="{{ 'neg' if s.warnung }}">{{ s.text }}
+      {%- if s.cents is not none %} <strong>{{ s.cents|euro }}</strong>{% endif %}
+      {%- if s.warnhinweis %} <span class="muted">— {{ s.warnhinweis }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+{% include "_klappzustand.html" %}
+{% import "_konfig.html" as kf %}
+{{ kf.fuss([
+  ('config/balances.yaml', 'Die Stände, deren Alter hier geprüft wird; auch was hier an Werten und Notizen geändert wurde, samt den abgelegten Ständen je Monat.'),
+  ('config/renten.yaml', 'Rentenquellen mit Art, Beginn, Betrag, Stand und Notiz, gepflegt auf /renten.'),
+  ('config/accounts.yaml', 'Welche Konten einen Auszug liefern müssen.'),
+  ('config/backup.yaml', 'Wohin das Backup schreibt und wie viele Stände bleiben.'),
+  ('config/szenarien.yaml', 'Welche Pläne eingeschaltet sind.'),
+  ('config/goals.yaml', 'Das Barista-FIRE-Ziel in der Fortschrittszeile.'),
+  ('config/forecast.yaml', 'Die Kontenvorschau in der Ablaufzeile.'),
+  ('finctl/web/templates/monatsabschluss.html', 'Die Texte dieser Seite.'),
+], handbuch='monatsabschluss') }}
+{% endblock %}

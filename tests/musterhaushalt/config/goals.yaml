@@ -1,0 +1,29 @@
+ziele:
+- id: tagesgeld-puffer
+  name: Notgroschen
+  cents: 1500000
+  stichtag: '{J+1}-06-01'
+  basis:
+  - tagesgeld
+  - giro
+  notiz: Drei Monatsausgaben.
+- id: unabhaengig
+  name: Unabhaengig
+  cents: 60000000
+  stichtag: '{J+19}-01-01'
+  basis:
+  - giro
+  - tagesgeld
+  - depot
+  - krypto
+  notiz: Vier Prozent Entnahme auf die angesetzten Jahreskosten.
+- id: barista-fire
+  name: Teilzeit-Ausstieg
+  cents: 20000000
+  stichtag: '{J+12}-10-01'
+  basis:
+  - giro
+  - tagesgeld
+  - depot
+  notiz: Gemessen an Giro, Tagesgeld und Depot; die Policen zaehlen nicht mit. Stichtag
+    mitten im Jahr, damit die Hochrechnung zwischen zwei Jahresenden liegt.

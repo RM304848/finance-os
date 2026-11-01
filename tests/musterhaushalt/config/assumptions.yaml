@@ -1,0 +1,21 @@
+inflation_pa: 0.02
+kapital:
+  rendite_nominal_pa: 0.025
+  rendite_depot_pa: 0.06
+  vorabpauschale:
+    basiszins_pa: 0.0253
+    steuersatz: 0.26375
+erwerbseinkommen:
+  netto_floor_monatlich_cents: 360000
+  netto_median_monatlich_cents: 380000
+  gehalt_steigerung_pa: 0.02
+  teilzeit_anteil: 0.8
+  teilzeit_ab: 2040-01
+immobilien: {}
+ruhestand:
+  lebenserwartung: 95
+  abzug_renten: 0.25
+  aufbrauchen: 1.0
+notizen:
+  kapital.rendite_depot_pa:
+    notiz: Breiter Aktienfonds, vor Kosten gerechnet.

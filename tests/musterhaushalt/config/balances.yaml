@@ -1,0 +1,65 @@
+as_of: {M}-01
+balances:
+  - account_id: giro
+    kind: giro
+    notiz: Betriebskonto. Gehalt rein, Fixkosten raus.
+  - account_id: tagesgeld
+    kind: tagesgeld
+  - account_id: alltag
+    kind: giro
+  - account_id: ratenkonto
+    kind: giro
+    notiz: Fuehrt nur die Rate fuer Wohnung Nord aus.
+  - account_id: depot
+    name: Depot
+    cents: 1850000
+    as_of: {M}-01
+    kind: depot
+    liquidity: immediate
+  - account_id: depot-alt
+    name: Altes Depot
+    cents: 0
+    as_of: {M-1}-15
+    kind: depot
+    realised_cents: 250000
+    notiz: Verkauft und als Null gefuehrt statt geloescht.
+  - account_id: krypto
+    name: Kryptoboerse
+    cents: 160000
+    as_of: {M}-01
+    kind: krypto
+    liquidity: unstaking_delay
+  - account_id: police-a
+    name: Fondspolice A
+    cents: 1200000
+    as_of: {M-5}-01
+    kind: rentenversicherung
+    liquidity: effectively_illiquid
+    rueckkauf_cents: 1150000
+    rueckkauf_as_of: {M-5}-01
+    eingezahlt_cents: 1000000
+    notiz: Beitrag 150 im Monat.
+  - account_id: police-b
+    name: Kapitalpolice B
+    cents: 800000
+    as_of: {M-3}-01
+    kind: rentenversicherung
+    liquidity: faellig_2040_06
+    rueckkauf_cents: 760000
+    rueckkauf_as_of: {M-5}-01
+    rueckkauf_policenwert_cents: 750000
+obligations:
+  - name: Treuhand
+    cents: 300000
+    notiz: Liegt im Tagesgeld und gehoert jemand anderem.
+verlauf:
+  depot:
+    '{M-1}': {cents: 1800000, as_of: '{M-1}-02'}
+  depot-alt:
+    '{M-1}': {cents: 250000, as_of: '{M-1}-02'}
+  krypto:
+    '{M-1}': {cents: 150000, as_of: '{M-1}-02'}
+  police-a:
+    '{Y-1}': {cents: 1200000, as_of: '{M-5}-01'}
+  police-b:
+    '{Y-1}': {cents: 800000, as_of: '{M-3}-01'}

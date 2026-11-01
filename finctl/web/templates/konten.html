@@ -1,0 +1,415 @@
+{% extends "base.html" %}{% block n_konten %}on{% endblock %}
+{% block title %}Konten{% endblock %}
+{% block body %}
+<style>
+  /* Konto, Zahlen und Knopf stehen auf einer Linie; der Zweck darunter
+     haengt ohne Trennstrich an seiner Zeile. */
+  table.konten td{vertical-align:middle}
+  table.konten tr.hauptzeile td{border-bottom:0}
+  table.konten tr.unterzeile td{padding-top:0;border-top:0;vertical-align:top}
+  /* Die Kontenregeln: ein Raster, das auf dem Telefon umbricht. */
+  .regeln{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem}
+  .regeln label{margin:0}
+  .regeln label.schalter{align-self:end;font-weight:400;font-size:12px}
+  .regeln input,.regeln select{width:100%}
+  .regeln input.betrag{text-align:right}
+  /* Ein Haken bleibt ein Haken: mit width:100% stand er als Balken ueber
+     seiner Beschriftung. */
+  .regeln input[type=checkbox]{width:auto;margin-right:.35rem}
+  /* Auf dem Telefon ist die Tabelle breiter als der Bildschirm und scrollt
+     waagerecht -- der Bearbeitungsbereich darin waere 940 Pixel breit und
+     muesste zum Ausfuellen seitlich geschoben werden. Angeheftet bleibt er
+     stehen, waehrend die Zeilen darueber scrollen. */
+  @media (max-width: 700px){
+    /* `table{overflow:hidden}` aus base.html rundet die Ecken -- und macht
+       die Tabelle zum naechsten Scrollport, an dem `sticky` haengenbleibt,
+       ohne je zu haften. Auf dem Telefon zaehlt das Formular mehr als die
+       Ecken. */
+    table.konten{overflow:visible}
+    table.konten tr.panel > td{padding:0}
+    .panel-inhalt{position:sticky;left:0;width:calc(100vw - 2.6rem);
+                  padding:.6rem .8rem}
+    .regeln{grid-template-columns:1fr}
+    /* In den Monatstabellen bleibt, worum es geht: der Tiefpunkt und wo der
+       Monat endet. Die Posten dazwischen stehen im aufgeklappten Monat. */
+    table.monate .nebensache{display:none}
+    table.monate td.monat{white-space:nowrap}
+    table.monate th,table.monate td{padding-left:.45rem;padding-right:.45rem}
+  }
+</style>
+<h1>Konten</h1>
+<p class="zweck">Der Tiefpunkt jedes Kontos im Monat, Monat für Monat — und ob er unter die Untergrenze fällt.</p>
+{% from "_auswahl.html" import auswahl %}
+{{ auswahl(request, 'months', 'Horizont',
+           [(horizon_default, horizon_default ~ ' Monate'), (horizon_long, horizon_long ~ ' Monate')],
+           horizon_default if months <= horizon_default else horizon_long) }}
+{% for vk in verkauf_hinweis %}
+<div class="note">Verkauf <strong>{{ vk.name }}</strong> ab {{ vk.ab.strftime('%Y-%m') }} aus der
+  Klammer <a class="plain" href="/planung#klammer-{{ vk.klammer_id }}">{{ vk.klammer }}</a> ist
+  hier <strong>nicht</strong> eingerechnet: Rate, Miete und Erlös laufen auf den Konten weiter wie
+  bisher. Der Verkauf wirkt nur in der
+  <a class="plain" href="/hochrechnung#jahr-{{ vk.ab.year }}">Hochrechnung</a>.</div>
+{% endfor %}
+{% for o in objekt_hinweis %}
+<div class="note">Die Prognose von <strong>{{ o.name }}</strong> findet hier kein Konto: Miete und
+  Kosten fehlen auf dieser Seite. Es braucht ein Konto mit Auszügen, auf dem die Miete gebucht wird, oder
+  ein Giro mit Auszügen als Betriebskonto.</div>
+{% endfor %}
+{% if months > horizon_default %}
+<div class="note" id="gemessen-bis">Gemessen ist bis <strong>{{ gemessen_bis or '—' }}</strong>;
+  alles danach ist fortgeschrieben. Über Jahre gelesen: ein Vertrag, dessen Ende niemand
+  eingetragen hat, bucht hier weiter.</div>
+{% endif %}
+
+{# Vor den Konten, weil es die Frage ist, die entscheidet, ob der Ertrag des
+   Objekts in den Puffer fliessen kann. Gemessen und vorausgerechnet in einem
+   Bild, damit der Bruch zwischen beiden sichtbar bleibt. #}
+{% set ob = ohne_objekt %}
+{% set ziel = ob.ziel_cents %}
+<h2 id="ohne-objekt">Cashflow ohne {{ ob.label }}</h2>
+<div class="cards">
+  <div class="card"><div class="k">Letzter Monat{% if ob.letzter %} · {{ ob.letzter.monat.strftime('%Y-%m') }}{% endif %}</div>
+    {% if ob.letzter %}
+    <div class="v {{ 'pos' if ob.letzter.cents >= ziel else 'neg' }}">{{ ob.letzter.cents|euro }}</div>
+    {% else %}<div class="v muted">—</div>{% endif %}
+    <div class="muted klein">Ziel ≥ {{ ziel|euro }}</div></div>
+  <div class="card"><div class="k">Gemessen · Ø {{ ob.gemessen_anzahl }} Monate</div>
+    {% if ob.schnitt_gemessen_cents is not none %}
+    <div class="v {{ 'pos' if ob.schnitt_gemessen_cents >= ziel else 'neg' }}">{{ ob.schnitt_gemessen_cents|euro }}</div>
+    {% else %}<div class="v muted">—</div>{% endif %}
+    <div class="muted klein">{{ ob.gemessen_erreicht }} von {{ ob.gemessen_anzahl }} Monaten erreicht</div></div>
+  <div class="card"><div class="k">Prognose · Ø {{ ob.prognose_anzahl }} Monate</div>
+    {% if ob.schnitt_prognose_cents is not none %}
+    <div class="v {{ 'pos' if ob.schnitt_prognose_cents >= ziel else 'neg' }}">{{ ob.schnitt_prognose_cents|euro }}</div>
+    {% else %}<div class="v muted">—</div>{% endif %}
+    <div class="muted klein">{{ ob.prognose_erreicht }} von {{ ob.prognose_anzahl }} Monaten erreicht · Gehalt als Untergrenze</div></div>
+  <div class="card"><div class="k">Gemeinschaftskonto{% if ob.letzter %} · {{ ob.letzter.monat.strftime('%Y-%m') }}{% endif %}</div>
+    {% set soll = ob.gemeinschaftskonto_soll_cents %}
+    {% if ob.letzter %}
+    <div class="v {{ 'neg' if soll and -ob.letzter.gemeinschaftskonto_cents > soll else '' }}">{{ ob.letzter.gemeinschaftskonto_cents|euro }}</div>
+    {% else %}<div class="v muted">—</div>{% endif %}
+    <div class="muted klein">{% if soll %}Soll {{ (-soll)|euro }} · {% endif %}Ø <span class="{{ (ob.gemeinschaft_schnitt_cents or 0)|vz }}">{{ (ob.gemeinschaft_schnitt_cents or 0)|euro }}</span></div></div>
+</div>
+{# Gezeichnet in finctl/web/diagramm.py, die Tabelle mit denselben Zahlen darunter. #}
+{{ ohne_objekt_diagramm }}
+
+{# Ein Diagramm, kein Diagramm pro Konto: die Wahl ist eine Adresse, wie jede
+   Auswahlzeile, und der Verlauf springt nach dem Laden wieder hierher. #}
+<h2 id="verlauf">Verlauf</h2>
+{{ auswahl(request, 'konto', 'Konto',
+           konto_optionen, konto, anker='verlauf') }}
+{{ verlauf }}
+
+{# Die Strategie zuerst: Tiefpunkte beantworten "geht eines ins Minus", nicht
+   "wofuer ist welches Konto da". Sortiert nach ROLLE, weil Gehalt, Verteilung
+   und Tagesgeld eine Reihenfolge sind, die eine alphabetische Liste verbirgt. #}
+{% set unter = views|selectattr('breach_months')|list %}
+<h2>Wozu welches Konto da ist</h2>
+{# Zu, weil die Tabelle die Konfiguration der Seite ist und nicht ihr Befund
+   -- der steht im Diagramm darueber. Offen, sobald ein Konto unter seiner
+   Grenze liegt: dann ist sie kein Nachschlagewerk mehr, sondern die Stelle,
+   an der man etwas aendert. #}
+<details class="klapp"{{ ' open' if unter }}>
+  <summary>{{ views|length }} Konten
+    <span class="zahl">— Rolle, Grenzen und Zweck
+      {%- if unter %}, {{ unter|length }} unter der eigenen Grenze{% endif %}</span>
+  </summary>
+<div class="wrap">
+<table class="konten">
+  <tr id="kopfzeile"><th style="width:150px">Konto</th><th style="width:110px">Rolle</th>
+      <th class="num" style="width:100px"
+          title="Deklarierter Dauerauftrag, keine gemessene Zahl">Zufluss</th>
+      <th class="num" style="width:95px">Untergrenze</th>
+      <th class="num" style="width:95px"
+          title="Guthaben darüber gehört aufs Tagesgeld">Deckel</th>
+      <th class="num" style="width:120px">Tiefpunkt</th>
+      <th class="num" style="width:110px">Auffüllung</th>
+      <th class="num" style="width:115px"
+          title="Auftrag, kein Befund: der Betrag über dem Deckel gehört monatlich aufs Tagesgeld">Abräumen</th>
+      <th></th></tr>
+  {# EIN Bearbeitungsbereich, der unter die geoeffnete Zeile wandert. Die
+     Regeln standen vorher je Konto als offene Karte unter der Tabelle: jeder
+     Wert zweimal auf derselben Seite, einmal als Text und einmal als Feld. #}
+  <tr id="panel" class="panel" hidden><td colspan="9">
+    <div class="panel-inhalt">
+    <p class="muted" style="margin:0 0 .5rem"><strong id="f-titel"></strong>
+      <span id="f-status"></span></p>
+    <div class="regeln">
+      <label id="f-floor-label">Untergrenze €
+        <input id="f-floor" class="betrag"></label>
+      <label title="Deckel: Guthaben darüber gehört aufs Tagesgeld">Deckel €
+        <input id="f-ceil" class="betrag" placeholder="keiner"></label>
+      <label title="Deklarierter Dauerauftrag, keine gemessene Zahl">Dauerauftrag €
+        <input id="f-bud" class="betrag" placeholder="keiner"></label>
+      <label>Rolle
+        <select id="f-role" data-no-combo onchange="sperren()">
+          {% for name in rollen_namen %}<option value="{{ name }}">{{ rollen_text.get(name, name) }}</option>{% endfor %}
+        </select></label>
+      <label title="Was über dem Deckel liegt, geht am Monatsende dorthin. Nur das Betriebskonto räumt ab — nur für dessen Übertrag gibt es die Gegenbuchung">Abräumen nach
+        <select id="f-sweep" data-no-combo></select></label>
+      <label class="schalter" title="Aus: eine Unterschreitung bleibt sichtbar, statt still gedeckt zu werden">
+        <input type="checkbox" id="f-fill"> vom Betriebskonto auffüllen</label>
+      <label class="schalter" title="Die Untergrenze ist dann eine Monatsrate des Kredits">
+        <input type="checkbox" id="f-loanfloor" onchange="sperren()"> Untergrenze aus Kreditrate</label>
+    </div>
+    <label style="display:block;margin:.5rem 0 0">Zweck
+      <textarea id="f-note" class="notizfeld" rows="3"
+                placeholder="wofür dieses Konto da ist"></textarea></label>
+    <p class="zeilen-knoepfe">
+      <button type="button" onclick="regelSpeichern()">Speichern</button>
+      <button type="button" class="ghost" onclick="oeffne(offen)">Schließen</button>
+      <span id="f-meldung" class="muted klein"></span></p>
+    </div>
+  </td></tr>
+  {% for v in views %}
+  <tr id="r-{{ v.id }}" class="klappbar hauptzeile" onclick="oeffne('{{ v.id }}')"
+      style="cursor:pointer">
+    <td><a class="plain" href="#k-{{ v.id }}"
+           onclick="event.stopPropagation()">{{ v.id }}</a></td>
+    <td><span class="pill">{{ rollen_text.get(v.role, v.role) if v.role else '—' }}</span></td>
+    <td class="num">{{ v.budget_cents|euro if v.budget_cents else '—' }}</td>
+    <td class="num muted">{{ v.dispo_threshold_cents|euro }}
+      {%- if v.notgroschen_cents and v.notgroschen_cents == v.dispo_threshold_cents %}
+      <br><span class="fein" title="Die Grenze des Notgroschens (Ziele) ist die Untergrenze dieses Kontos, solange sie höher ist als die der Regel">Notgroschen</span>{% endif %}</td>
+    <td class="num muted">{{ v.ceiling_cents|euro if v.ceiling_cents else '—' }}</td>
+    <td class="num {{ 'neg' if v.breach_months else 'pos' }}">
+      {{ v.worst_trough_cents|euro if v.worst_trough_cents is not none else '—' }}</td>
+    <td class="num {{ 'warn' if v.topped_up_cents else 'muted' }}">
+      {{ v.topped_up_cents|euro if v.topped_up_cents else '—' }}</td>
+    <td class="num">{% if v.sweeps_to %}{{ v.sweep_total_cents|euro }}
+      <br><span class="muted fein">→ {{ v.sweeps_to }}</span>{% else %}—{% endif %}</td>
+    <td class="aktionen"><button type="button" class="ghost"
+      onclick="event.stopPropagation();oeffne('{{ v.id }}')">Öffnen</button></td>
+  </tr>
+  {# Der Zweck gehoert zur Zeile, braucht aber die ganze Breite: als Spalte
+     blieben davon neunzig Pixel, und die Zeile wurde fuenf Zeilen hoch. #}
+  <tr class="unterzeile klappbar" id="u-{{ v.id }}"
+      onclick="oeffne('{{ v.id }}')" style="cursor:pointer">
+    <td colspan="9" class="muted klein">{{ v.role_note or '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+
+</details>
+
+{# Eine Police ist kein Konto und zaehlt hier nicht mit: der Notfallwert ist nur
+   eine Anzeige, Notgroschen und liquides Vermoegen rechnen ohne ihn. #}
+{% if policen %}
+<h2 id="notfall">Policen im Notfall</h2>
+<div class="wrap"><table>
+  <tr><th>Police</th><th class="num">Policenwert</th><th class="num">Rückkaufswert</th>
+    <th class="num">eingezahlt</th><th class="num">Steuer auf den Ertrag</th>
+    <th class="num">Notfallwert</th><th>Stand der Mitteilung</th></tr>
+  {% for p in policen %}{% set n = p.notfall %}
+  <tr id="notfall-{{ p.key|e }}">
+    <td>{{ p.name }}</td>
+    <td class="num">{{ p.cents|euro if p.cents is not none else '—' }}
+      <span class="muted fein">{{ p.as_of }}</span></td>
+    {% if n %}
+    <td class="num" title="{{ p.herleitung|e }}">{{ n.rueckkauf_cents|euro }}</td>
+    <td class="num">{{ n.eingezahlt_cents|euro if n.eingezahlt_cents is not none else '—' }}</td>
+    <td class="num">{{ n.steuer_cents|euro }}</td>
+    <td class="num" title="{{ p.herleitung|e }}"><strong>{{ 'mind. ' if n.ertrag_cents is none }}{{ n.cents|euro }}</strong></td>
+    <td>{{ n.stand }}
+      {%- if n.verhaeltnis_fehlt %} <span class="muted fein">Verhältnis fehlt</span>{% endif %}</td>
+    {% else %}
+    <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+    <td class="muted">kein Rückkaufswert{% if seite_an("/monatsabschluss") %}, <a class="plain"
+      href="/monatsabschluss#pos-{{ p.key|e }}">eintragen →</a>{% endif %}</td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{% for v in views %}
+<h2 id="k-{{ v.id }}">{{ v.display_name }}
+  <span class="pill" style="vertical-align:middle">{{ rollen_text.get(v.role, v.role) if v.role else '—' }}</span>
+  {% if v.get('error') %}<span class="muted zusatz">— {{ v.error }}</span>
+  {% elif v.worst_trough_cents is not none %}
+  <span class="{{ 'neg' if v.breach_months else 'pos' }} zusatz">
+    — Tiefpunkt {{ v.worst_trough_cents|euro }}{% if v.worst_month %} im {{ v.worst_month[:7] }}{% endif %}</span>
+  {% endif %}</h2>
+
+{% if not v.get('error') %}
+<details class="klapp"{% if v.breach_months %} open{% endif %}>
+  <summary>Monate
+    <span class="zahl">— {{ months }} Monate
+      {%- if v.breach_months %}, {{ v.breach_months|length }} davon unter der Grenze{% endif %}</span>
+  </summary>
+<div class="wrap">
+<table class="monate">
+  <tr><th style="width:80px">Monat</th>
+      <th class="num nebensache" style="width:120px">vor Gehalt</th>
+      <th class="num nebensache" style="width:120px">Kosten</th>
+      <th class="num" style="width:130px">nach Kosten</th>
+      <th class="num nebensache" style="width:120px">Einnahmen</th>
+      <th class="num" style="width:130px">nach Gehalt</th>
+      <th class="num nebensache" style="width:110px">abräumen</th>
+      <th class="nebensache" style="width:90px"></th></tr>
+  {% for r in v.rows %}
+  {# Der Monat ist der Schalter. Ein teurer Monat soll sagen koennen, WAS ihn
+     teuer macht -- ohne das war die Tabelle eine Summe ohne Beleg. #}
+  <tr class="klappbar" onclick="zeigDetail('{{ v.id }}-{{ loop.index0 }}')"
+      style="cursor:pointer">
+    <td class="muted monat"><span class="pfeil" id="p-{{ v.id }}-{{ loop.index0 }}">▸</span>
+      {{ r.month[:7] }}</td>
+    <td class="num nebensache {{ r.opening_cents|vz }}">{{ r.opening_cents|euro }}</td>
+    <td class="num neg nebensache">{{ r.costs_cents|euro }}</td>
+    {# Die Spalte, auf die es ankommt. Alles andere ist Kontext. #}
+    <td class="num {{ 'neg' if r.breaches_dispo else 'pos' }}"
+        style="font-weight:600">{{ r.trough_cents|euro }}</td>
+    <td class="num nebensache {{ r.income_cents|vz }}">{{ r.income_cents|euro }}</td>
+    <td class="num {{ r.closing_cents|vz }}">{{ r.closing_cents|euro }}</td>
+    <td class="num nebensache {{ 'pos' if r.swept_cents else 'muted' }}">
+      {{ r.swept_cents|euro if r.swept_cents else '—' }}</td>
+    <td class="nebensache">{% if r.breaches_dispo %}<span class="pill solid" style="background:var(--bad)">unter Grenze</span>{% endif %}</td>
+  </tr>
+  <tr id="d-{{ v.id }}-{{ loop.index0 }}" hidden>
+    <td class="nebensache"></td>
+    <td colspan="7" style="padding:0 0 .5rem">
+      <table class="detail">
+        {% for etikett, cents in r.detail.items() %}
+        {% set h = (v.herkunft or {}).get(etikett) %}
+        <tr>
+          <td class="muted" style="width:60%">{{ v.labels.get(etikett, etikett) }}
+            {%- if h %} <span class="pill{{ ' eigen' if h.quelle == 'plan' }}">{{ h.quelle }}</span>
+            <div class="fein" style="opacity:.85;white-space:normal">{{ h.herleitung }}</div>{% endif %}</td>
+          <td class="num {{ cents|vz }}">{{ cents|euro }}</td>
+        </tr>
+        {% else %}
+        <tr><td class="muted">Keine Einzelposten — in diesem Monat rechnet die
+          Prognose mit nichts, was sie benennen könnte.</td></tr>
+        {% endfor %}
+      </table>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+</div>
+</details>
+{% endif %}
+{% endfor %}
+
+
+<script>
+const VIEWS = {{ konten_daten|tojson }};
+const KONTEN = Object.fromEntries(VIEWS.map(v => [v.id, v]));
+
+// Math.round(-0.4) ist -0, und toLocaleString macht daraus "-0 €".
+const fmt = c => ((Math.abs(c) < 50 ? 0 : c) / 100).toLocaleString('de-DE',
+  {maximumFractionDigits:0}) + ' €';
+
+function zeigDetail(key){
+  const zeile = document.getElementById('d-' + key);
+  const pfeil = document.getElementById('p-' + key);
+  if(!zeile) return;
+  zeile.hidden = !zeile.hidden;
+  if(pfeil) pfeil.textContent = zeile.hidden ? '▸' : '▾';
+}
+
+// ---------------------------------------------------------- Kontenregeln
+let offen = null;
+const feld = n => document.getElementById('f-' + n);
+
+// Zwei Felder sind abgeleitet, nicht getippt: eine Untergrenze aus der
+// Kreditrate waechst mit ihr, und abraeumen kann nur das Betriebskonto -- fuer
+// jeden anderen Uebertrag gibt es keine Gegenbuchung. Gesperrt zeigt das
+// Abraeumziel deshalb "—": ein Wert darin rechnet nicht, Speichern loescht ihn.
+function sperren(){
+  feld('floor').disabled = feld('loanfloor').checked;
+  const sweep = feld('sweep');
+  sweep.disabled = feld('role').value !== 'operating';
+  sweep.value = sweep.disabled ? '' : (sweep.dataset.wert || '');
+}
+
+function oeffne(id){
+  const panel = document.getElementById('panel');
+  if(offen === id && !panel.hidden){ panel.hidden = true; offen = null; merken(); return; }
+  const v = KONTEN[id];
+  if(!v) return;
+  const r = v.regel || {};
+  feld('titel').textContent = id;
+  feld('status').innerHTML = status(v);
+  feld('floor').value = centsAlsText(v.regel_untergrenze_cents ?? v.dispo_threshold_cents ?? 0);
+  feld('ceil').value = r.ceiling_cents ? centsAlsText(r.ceiling_cents) : '';
+  feld('bud').value = r.budget_cents ? centsAlsText(r.budget_cents) : '';
+  feld('role').value = r.role || '';
+  feld('sweep').innerHTML = '<option value="">—</option>' + VIEWS
+    .filter(o => o.id !== id)
+    .map(o => `<option value="${o.id}"${r.sweep_to === o.id ? ' selected' : ''}>${o.id}</option>`)
+    .join('');
+  feld('sweep').dataset.wert = r.sweep_to || '';
+  feld('fill').checked = r.auffuellen !== false;
+  feld('loanfloor').checked = !!r.floor_from_loan;
+  feld('note').value = r.note || '';
+  sperren();
+  meldung('');
+  document.getElementById('u-' + id).after(panel);
+  // Eine gemerkte Zeile kann in einer zugeklappten Tabelle liegen; das
+  // Formular waere dann offen und unsichtbar.
+  const klapp = panel.closest('details');
+  if(klapp) klapp.open = true;
+  panel.hidden = false; offen = id; merken();
+}
+
+function status(v){
+  const teile = [];
+  if((v.breach_months || []).length){
+    teile.push('<strong class="neg">unterschritten ' +
+      v.breach_months.map(m => m.slice(0,7)).join(', ') + '</strong>');
+  } else { teile.push('hält'); }
+  if(v.ceiling_cents && (v.over_ceiling_months || []).length){
+    teile.push('<strong class="warn">' + fmt(v.idle_cents) + '</strong> über Deckel');
+  }
+  if(v.notgroschen_cents && v.notgroschen_cents > (v.regel_untergrenze_cents || 0)){
+    teile.push('Untergrenze <strong>' + fmt(v.notgroschen_cents) + '</strong> ist der Notgroschen');
+  }
+  return '— ' + teile.join(' · ');
+}
+
+function meldung(t){ feld('meldung').textContent = t; }
+function merken(){ try { sessionStorage.setItem('konten-offen', offen || ''); } catch (e) {} }
+(function zurueck(){
+  try {
+    const id = sessionStorage.getItem('konten-offen');
+    if(id && KONTEN[id]) oeffne(id);
+  } catch (e) {}
+})();
+
+async function regelSpeichern(){
+  const id = offen;
+  const zahl = n => { const t = (feld(n).value || '').trim();
+                      return t === '' ? null : centsAus(t); };
+  const floor = feld('floor').disabled ? undefined : zahl('floor');
+  if(floor === null){ meldung('Untergrenze ist keine Zahl.'); return; }
+  const deckel = zahl('ceil'), budget = zahl('bud');
+  if(deckel === undefined || budget === undefined){ meldung('Keine Zahl.'); return; }
+  const res = await fetch('/api/konto/' + id, {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      floor_cents: floor, ceiling_cents: deckel, budget_cents: budget,
+      role: feld('role').value,
+      sweep_to: feld('sweep').disabled ? undefined : feld('sweep').value,
+      auffuellen: feld('fill').checked,
+      floor_from_loan: feld('loanfloor').checked,
+      note: feld('note').value})});
+  if(res.ok){ meldung('gespeichert — neu rechnen…');
+              setTimeout(() => location.reload(), 600); }
+  else { const o = await res.json(); meldung(o.error || 'fehlgeschlagen'); }
+}
+
+</script>
+{% import "_konfig.html" as kf %}
+{{ kf.fuss([
+  ('config/forecast.yaml', 'Rolle, Budget und Mindestniveau je Konto — mit der Notiz, die sagt, warum.'),
+  ('config/abos.yaml', 'Abos mit Termin, die der Auszug nicht zeigt — Vorräte, Amazon, neuer Zahlweg.'),
+  ('config/assumptions.yaml', 'Gehaltsuntergrenze, Inflation, Objektertrag.'),
+  ('config/loans.yaml', 'Kreditraten, die abgebucht werden.'),
+  ('config/szenarien.yaml', 'Eingeschaltete Pläne, die in der Vorschau mitlaufen.'),
+  ('config/accounts.yaml', 'Welche Konten es gibt.'),
+  ('config/balances.yaml', 'Policen mit Policenwert und Rückkaufswert laut Mitteilung; auch was im Monatsabschluss zu den Policen eingetragen wurde.'),
+  ('finctl/web/templates/konten.html', 'Die Texte dieser Seite.'),
+], handbuch='konten') }}
+{% endblock %}

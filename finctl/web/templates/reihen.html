@@ -1,0 +1,202 @@
+{% extends "base.html" %}{% block n_reihen %}on{% endblock %}
+{% block title %}Reihen{% endblock %}
+{% from "_auswahl.html" import auswahl %}
+{% block body %}
+<h1>Reihen</h1>
+<p class="zweck">Wie oft jede Zahlung kommt und mit welchem Betrag je Termin.</p>
+{{ auswahl(request, 'zeige', 'Anzeige', anzeigen, zeige) }}
+<details class="hilfe">
+  <summary>Erkannt, festgelegt, einmalig</summary>
+  <p>Der Takt wird aus den Buchungen seit {{ von }} erkannt.</p>
+  <p>Festgelegt gilt für die ganze Reihe, aber nur für das Wie oft.</p>
+  <p>Ob eine Reihe weiterläuft, folgt den Buchungen.</p>
+  <p>Einmalig gilt für einzelne Buchungen und Kategorien mit diesem Merkmal.</p>
+  <p>Beides fällt aus jeder Fortschreibung.</p>
+</details>
+<details class="hilfe">
+  <summary>Zusammengeführt</summary>
+  <p>Wechselt die Schreibweise eines Zahlers, zählt jede als eigene Reihe.</p>
+  <p>„Gehört zu“ führt sie für Takt und Fortschreibung zu einer Reihe zusammen.</p>
+  <p>Vorgeschlagen wird es, wo eine Reihe endet und eine gleich teure beginnt.</p>
+</details>
+
+{% if vorschlaege %}
+<h2 id="vorschlaege">Vorschläge</h2>
+<div class="wrap"><table class="vorschlaege">
+  <tr><th>Bisher</th><th>Neu</th><th>Kategorie</th><th class="num">je Termin</th><th>Bis</th><th>Ab</th><th></th></tr>
+  {% for v in vorschlaege %}
+  <tr>
+    <td>{{ v.alt }}</td><td>{{ v.neu }}</td>
+    <td class="muted">{{ v.kategorien|join(', ') }}</td>
+    <td class="num {{ v.betrag_cents|vz }}">{{ v.betrag_cents|euro }}</td>
+    <td class="nobr">{{ v.bis }}</td><td class="nobr">{{ v.ab }}</td>
+    <td class="aktionen"><button type="button" class="ghost" data-schreibweise="{{ v.alt }}"
+      data-ziel="{{ v.neu }}" onclick="zusammenfuehren(this)">Zusammenführen</button>
+      <span class="meldung fein"></span></td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{# Eine Zeile zeigt, der Bereich darunter bearbeitet (bearbeitungstabellen); offen ist
+   immer nur einer. Takt, Betrag und Jahreswert kommen vom Server. data-sortable lässt
+   _resize.html die Tabelle aus: Eine sortierte Zeile liesse ihren Bereich zurück. #}
+<div class="wrap"><table class="reihen" data-sortable="1">
+  <tr><th>Gegenpartei</th><th>Kategorie</th><th>Takt</th><th class="num">je Termin</th>
+      <th>Letzter Termin</th><th>Stand</th><th class="num">Jahreswert</th><th></th></tr>
+  {% for z in zeilen %}
+  <tr id="{{ z.id }}" class="klappbar" onclick="oeffne('{{ z.id }}')">
+    <td>{{ z.gegenpartei }}
+      {%- if z.schreibweisen %} <span class="pill eigen" title="{{ z.schreibweisen|join(', ') }}">zusammengeführt</span>{% endif %}</td>
+    <td class="muted">{{ z.kategorie_name }}</td>
+    <td class="nobr">{{ z.takt_name }}
+      {%- if z.festgelegt %} <span class="pill eigen">festgelegt</span>{% endif %}</td>
+    {% if z.betrag_cents is not none %}
+    <td class="num {{ z.betrag_cents|vz }}">{{ z.betrag_cents|euro }}</td>
+    <td class="nobr">{{ z.letzter }}</td>
+    <td><span class="pill">{{ 'läuft' if z.laeuft else 'beendet' }}</span></td>
+    <td class="num {{ z.jahreswert_cents|vz }}">{{ z.jahreswert_cents|euro }}</td>
+    {% else %}
+    <td class="num muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="num muted">—</td>
+    {% endif %}
+    <td class="aktionen"><button type="button" class="ghost"
+      onclick="event.stopPropagation();oeffne('{{ z.id }}')">Öffnen</button></td>
+  </tr>
+  <tr class="panel" id="p-{{ z.id }}" hidden><td colspan="8">
+    <div class="zeilen-form">
+      <label>Takt<select id="t-{{ z.id }}" data-no-combo>
+        <option value="" {{ 'selected' if not z.festgelegt }}>erkannt{{ '' if z.festgelegt else ': ' ~ z.takt_name }}</option>
+        {% for wert, text in takt_wahl %}
+        <option value="{{ wert }}" {{ 'selected' if z.takt == wert }}>{{ text }}</option>
+        {% endfor %}
+      </select></label>
+      <label>Notiz<textarea id="n-{{ z.id }}" class="notizfeld" rows="3">{{ z.notiz }}</textarea></label>
+    </div>
+    <p class="zeilen-knoepfe">
+      <button type="button" data-id="{{ z.id }}" data-buchung="{{ z.buchung }}"
+              onclick="festlegen(this)">Speichern</button>
+      {% if z.festgelegt %}<button type="button" class="ghost" data-id="{{ z.id }}"
+        data-buchung="{{ z.buchung }}" data-zurueck="1" onclick="festlegen(this)">Festlegung zurücknehmen</button>{% endif %}
+      <span class="meldung fein"></span>
+      {% if z.notiz_vom %}<span class="muted fein">Notiz vom {{ z.notiz_vom }}</span>{% endif %}</p>
+    {% if z.kandidaten %}
+    <div class="zeilen-form">
+      <label>Gehört zu<select id="z-{{ z.id }}" data-no-combo>
+        <option value="">—</option>
+        {% for k in z.kandidaten %}
+        <option value="{{ k.gegenpartei }}">{{ k.gegenpartei }} · zuletzt {{ k.zuletzt }}</option>
+        {% endfor %}
+      </select></label>
+    </div>
+    <p class="zeilen-knoepfe">
+      <button type="button" class="ghost" data-schreibweise="{{ z.gegenpartei }}"
+              data-wahl="z-{{ z.id }}" onclick="zusammenfuehren(this)">Zusammenführen</button>
+      <span class="meldung fein"></span></p>
+    {% endif %}
+    {% for name in z.schreibweisen %}
+    <p class="zeilen-knoepfe"><span class="nobr">{{ name }}</span>
+      <button type="button" class="ghost" data-schreibweise="{{ name }}"
+              onclick="zusammenfuehren(this)">Trennen</button>
+      <span class="meldung fein"></span></p>
+    {% endfor %}
+    <div class="buchungen"><div class="wrap"><table class="detail">
+      {% for t in z.termine %}
+      <tr>
+        <td class="nobr">{{ t.tag }}</td>
+        <td class="num {{ t.cents|vz }}">{{ t.cents|euro }}</td>
+        <td>{% if t.hinweis == 'Ausreißer' %}<span class="pill eigen" title="kommt zusätzlich, zählt nicht zum Takt">Ausreißer</span>
+          {%- elif t.hinweis %}<span class="pill" title="vor dem heutigen Betrag">früherer Betrag</span>{% endif %}</td>
+        <td class="aktionen">
+          {%- for b in t.buchungen %}
+          {% if t.buchungen|length > 1 %}<span class="muted fein nobr">{{ b.tag }} · {{ b.cents|euro }}</span> {% endif %}
+          <button type="button" class="ghost" data-buchung="{{ b.buchung }}"
+                  onclick="einmalig(this, true)">einmalig</button>
+          {%- endfor %}</td>
+      </tr>
+      {% endfor %}
+    </table></div></div>
+  </td></tr>
+  {% else %}
+  <tr><td colspan="8" class="muted">Keine Reihe in dieser Anzeige.</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2 id="einmalig">Einmalig</h2>
+{% if einmalig %}
+<div class="wrap"><table>
+  <tr><th>Tag</th><th>Gegenpartei</th><th>Kategorie</th><th class="num">Betrag</th><th></th></tr>
+  {% for e in einmalig %}
+  <tr>
+    <td class="nobr">{{ e.tag or '—' }}</td>
+    <td>{{ e.gegenpartei or '—' }}</td>
+    <td class="muted">{{ e.kategorie_name or '—' }}</td>
+    <td class="num {{ e.cents|vz }}">{{ e.cents|euro if e.bekannt else '—' }}</td>
+    <td class="aktionen"><button type="button" class="ghost" data-buchung="{{ e.buchung }}"
+      onclick="einmalig(this, false)">Zurücknehmen</button></td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<p class="muted klein">Keine Buchung einmalig gesetzt.</p>
+{% endif %}
+
+<script>
+let offen = null;
+function oeffne(id){
+  if (offen) document.getElementById('p-' + offen).hidden = true;
+  if (offen === id){ offen = null; return; }
+  document.getElementById('p-' + id).hidden = false;
+  offen = id;
+}
+async function senden(pfad, body){
+  const res = await fetch(pfad, {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  return [res, await res.json().catch(() => ({}))];
+}
+// Nach dem Speichern lädt die Seite neu, mit derselben Reihe offen.
+function neuLaden(id){
+  if (id) location.hash = id;
+  setTimeout(() => location.reload(), 700);
+}
+async function festlegen(knopf){
+  const id = knopf.dataset.id;
+  const body = {buchung: knopf.dataset.buchung, takt: ''};
+  if (!knopf.dataset.zurueck){
+    body.takt = document.getElementById('t-' + id).value;
+    body.notiz = document.getElementById('n-' + id).value;
+  }
+  const [res, out] = await senden('/api/reihen/takt', body);
+  if (!res.ok){ meldenNeben(knopf, out.error || 'fehlgeschlagen', true); return; }
+  meldenNeben(knopf, out.geschrieben ? 'gespeichert — neu rechnen …' : 'unverändert', false);
+  if (out.geschrieben) neuLaden(id);
+}
+// Ziel aus der Auswahl, aus dem Vorschlag, oder leer: die Zuordnung zurücknehmen.
+async function zusammenfuehren(knopf){
+  const wahl = knopf.dataset.wahl ? document.getElementById(knopf.dataset.wahl).value
+                                  : (knopf.dataset.ziel || '');
+  const trennen = !knopf.dataset.wahl && !knopf.dataset.ziel;
+  if (knopf.dataset.wahl && !wahl){ meldenNeben(knopf, 'Bitte eine Reihe wählen.', true); return; }
+  const [res, out] = await senden('/api/reihen/zusammen',
+    {schreibweise: knopf.dataset.schreibweise, ziel: trennen ? '' : wahl});
+  if (!res.ok){ meldenNeben(knopf, out.error || 'fehlgeschlagen', true); return; }
+  meldenNeben(knopf, out.geschrieben ? 'gespeichert — neu rechnen …' : 'unverändert', false);
+  if (out.geschrieben) neuLaden(offen);
+}
+async function einmalig(knopf, an){
+  const [res, out] = await senden('/api/reihen/einmalig', {buchung: knopf.dataset.buchung, einmalig: an});
+  if (!res.ok){ meldenNeben(knopf, out.error || 'fehlgeschlagen', true); return; }
+  meldenNeben(knopf, an ? 'einmalig — neu rechnen …' : 'zurückgenommen — neu rechnen …', false);
+  neuLaden(offen);
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const id = location.hash.slice(1);
+  if (id && document.getElementById('p-' + id)) oeffne(id);
+});
+</script>
+{% import "_konfig.html" as kf %}
+{{ kf.fuss([
+  ('config/reihen_custom.yaml', 'Was von dieser Seite aus festgelegt oder einmalig gesetzt wurde.'),
+  ('config/taxonomy.yaml', 'Welche Kategorie das Merkmal einmalig trägt.'),
+  ('finctl/web/templates/reihen.html', 'Die Texte dieser Seite.'),
+], handbuch='reihen') }}
+{% endblock %}

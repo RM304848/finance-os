@@ -1,0 +1,5 @@
+ziele:
+  - id: tagesgeld-puffer
+    name: Notgroschen
+    stichtag: null
+    basis: [tagesgeld, giro]
