@@ -85,6 +85,22 @@ def _monatsende(m: date) -> date:
             else date(m.year, m.month + 1, 1))
 
 
+def _reicht_bis(bis: date, monatsende: date) -> bool:
+    """Reicht ein Auszug bis `bis` an das Monatsende heran?
+
+    Auch ohne Buchung an den Tagen danach, wenn es nur Wochenende ist. Nennt
+    ein Export keinen Zeitraum (Sparkasse-CSV), endet der Auszug mit seiner
+    letzten Buchung, und die liegt am Freitag, wenn der Monat am Samstag
+    endet -- das ist kein fehlender Monat.
+    """
+    tag = bis + _EIN_TAG
+    while tag <= monatsende:
+        if tag.weekday() < 5:
+            return False
+        tag += _EIN_TAG
+    return True
+
+
 def konten(conn: sqlite3.Connection, heute: date, periode: str,
            balances: list[dict] | None = None) -> list[Posten]:
     """Geparste Konten: der Auszug ist der Beleg, kein Haken noetig.
@@ -105,7 +121,7 @@ def konten(conn: sqlite3.Connection, heute: date, periode: str,
             "WHERE a.ingest_mode = 'parsed' "
             "GROUP BY a.id, a.display_name ORDER BY a.display_name"):
         bis = date.fromisoformat(row["bis"]) if row["bis"] else None
-        deckt = bool(bis and bis >= noetig - _EIN_TAG)
+        deckt = bool(bis and _reicht_bis(bis, noetig - _EIN_TAG))
         p = Posten(id=f"konto:{row['id']}", name=row["display_name"] or row["id"],
                    gruppe="konten", periode=periode, stand=bis,
                    automatisch=True, erledigt=deckt)
@@ -216,6 +232,7 @@ def schritte(conn: sqlite3.Connection, views: list[dict] | None = None) -> list[
     ins Minus laeuft, ist es nicht. Eine Seite, auf der alles rot leuchtet,
     liest man nach dem zweiten Monat nicht mehr.
     """
+    from finctl import module as _module
     from finctl import ops
     from finctl.forecast import szenarien as sz
 
@@ -227,6 +244,12 @@ def schritte(conn: sqlite3.Connection, views: list[dict] | None = None) -> list[
     out.append({"id": "review", "titel": "Zuordnen", "ziel": "/transactions?ansicht=offen",
                 "text": f"{n} ohne Kategorie" if n else "nichts offen",
                 "cents": summe if n else None, "warnung": False})
+
+    # Planung und Kontenvorschau gehoeren zum Modul Prognose: wer es nicht eingeschaltet hat,
+    # soll hier weder "keine eingeschaltet" noch ein Urteil ueber Konten lesen, die nie
+    # vorausgerechnet wurden.
+    if not _module.seite_an("/planung"):
+        return out
 
     aktiv = [s for s in sz.load(_szspec()) if s.active]
     plan = [s for s in aktiv
@@ -254,9 +277,9 @@ def schritte(conn: sqlite3.Connection, views: list[dict] | None = None) -> list[
                     "text": f"{schlimmste['display_name']} unter Grenze, Tiefpunkt "
                             f"{_monat(schlimmste['worst_month'])}",
                     "cents": schlimmste["worst_trough_cents"], "warnung": True})
-    else:
+    elif views:
         out.append({"id": "konten", "titel": "Konten", "ziel": "/konten",
-                    "text": "alle zwoelf Monate ueber ihrer Grenze",
+                    "text": "alle zwölf Monate über ihrer Grenze",
                     "cents": None, "warnung": False})
     return out
 

@@ -69,9 +69,13 @@ def schritte() -> list[dict]:
     ziel = _sicherungsziel()
     person = _person.angaben()
     konten = _konten_zahl()
+    # Alter und Rentenalter rechnet nur die Prognose; ohne sie ist die Frage kein Mangel.
+    plant = "prognose" in _module.aktive()
     return [
         {"nr": 1, "id": "datenordner", "titel": "Wo die Daten liegen",
-         "fertig": bool(_p.ort()) or grund.startswith("config/"),
+         # Immer beantwortet: der Ordner, den das System fuer Anwendungsdaten vorsieht, ist keine
+         # offene Frage. Wer ihn verlegen will, tut es hier; wer nichts tut, hat auch gewaehlt.
+         "fertig": True,
          "stand": f"{ordner} — {grund}"},
         {"nr": 2, "id": "sicherung", "titel": "Wohin gesichert wird",
          "fertig": bool(ziel),
@@ -79,17 +83,18 @@ def schritte() -> list[dict]:
         {"nr": 3, "id": "konten", "titel": "Welche Konten es gibt",
          "fertig": konten > 0,
          "stand": f"{konten} angelegt" if konten else "noch keins angelegt"},
-        {"nr": 4, "id": "person", "titel": "Wer plant",
+        {"nr": 4, "id": "person", "titel": "Wer plant", "noetig": plant,
          "fertig": bool(person["geburtsdatum"] and person["krankenversicherung"]),
-         "stand": _person_stand(person)},
+         "stand": _person_stand(person, plant)},
         {"nr": 5, "id": "module", "titel": "Was die App zeigen soll",
          "fertig": True, "stand": _module_stand()},
     ]
 
 
-def _person_stand(person: dict) -> str:
+def _person_stand(person: dict, noetig: bool = True) -> str:
     if not person["geburtsdatum"]:
-        return "noch kein Geburtsdatum"
+        return ("noch kein Geburtsdatum" if noetig
+                else "nur für Prognose und Planung nötig")
     kv = person["krankenversicherung"] or "Krankenversicherung fehlt"
     return (f"geboren {person['geburtsdatum'].isoformat()}, {kv}, "
             f"Rente mit {person['rente_ab_alter']}")
@@ -206,9 +211,15 @@ def eigene_angaben() -> list[dict]:
             if _module.seite_an(wo.split("#")[0])]
 
 
-def offen() -> int:
-    """Wie viele der Fragen offen sind -- fuer den Hinweis auf /."""
-    return sum(1 for s in schritte() if not s["fertig"])
+def offen() -> tuple[int, int]:
+    """(offene Fragen, Fragen insgesamt) -- fuer den Hinweis auf /.
+
+    Gezaehlt werden nur die Fragen, die der Nutzer beantworten kann und muss: der Ordner
+    ergibt sich, und die Wahl der Module ist keine Pflicht.
+    """
+    fragen = [s for s in schritte()
+              if s["id"] in ("sicherung", "konten", "person") and s.get("noetig", True)]
+    return sum(1 for s in fragen if not s["fertig"]), len(fragen)
 
 
 def konten_zeilen() -> list[dict]:
@@ -230,7 +241,8 @@ def einrichtung(request: Request):
     stand = schritte()
     return TEMPLATES.TemplateResponse(request, "einrichtung.html", {
         "schritte": stand,
-        "zuerst": next((s["id"] for s in stand if not s["fertig"]), ""),
+        "zuerst": next((s["id"] for s in stand
+                        if not s["fertig"] and s.get("noetig", True)), ""),
         "vorgabe": str(_p.standard()),
         "zeiger": str(_p.zeiger()),
         # Fuer `_neues_konto.html`.

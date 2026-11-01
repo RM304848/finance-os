@@ -83,12 +83,14 @@
     <div class="v {{ 'pos' if ob.schnitt_prognose_cents >= ziel else 'neg' }}">{{ ob.schnitt_prognose_cents|euro }}</div>
     {% else %}<div class="v muted">—</div>{% endif %}
     <div class="muted klein">{{ ob.prognose_erreicht }} von {{ ob.prognose_anzahl }} Monaten erreicht · Gehalt als Untergrenze</div></div>
+  {% if ob.gemeinschaftskonto_soll_cents or ob.monate|selectattr('gemeinschaftskonto_cents')|list %}
   <div class="card"><div class="k">Gemeinschaftskonto{% if ob.letzter %} · {{ ob.letzter.monat.strftime('%Y-%m') }}{% endif %}</div>
     {% set soll = ob.gemeinschaftskonto_soll_cents %}
     {% if ob.letzter %}
     <div class="v {{ 'neg' if soll and -ob.letzter.gemeinschaftskonto_cents > soll else '' }}">{{ ob.letzter.gemeinschaftskonto_cents|euro }}</div>
     {% else %}<div class="v muted">—</div>{% endif %}
     <div class="muted klein">{% if soll %}Soll {{ (-soll)|euro }} · {% endif %}Ø <span class="{{ (ob.gemeinschaft_schnitt_cents or 0)|vz }}">{{ (ob.gemeinschaft_schnitt_cents or 0)|euro }}</span></div></div>
+  {% endif %}
 </div>
 {# Gezeichnet in finctl/web/diagramm.py, die Tabelle mit denselben Zahlen darunter. #}
 {{ ohne_objekt_diagramm }}
@@ -404,7 +406,7 @@ async function regelSpeichern(){
 {% import "_konfig.html" as kf %}
 {{ kf.fuss([
   ('config/forecast.yaml', 'Rolle, Budget und Mindestniveau je Konto — mit der Notiz, die sagt, warum.'),
-  ('config/abos.yaml', 'Abos mit Termin, die der Auszug nicht zeigt — Vorräte, Amazon, neuer Zahlweg.'),
+  ('config/abos.yaml', 'Abos mit Termin, die der Auszug nicht zeigt — etwa ein Zahlweg über einen Händler.'),
   ('config/assumptions.yaml', 'Gehaltsuntergrenze, Inflation, Objektertrag.'),
   ('config/loans.yaml', 'Kreditraten, die abgebucht werden.'),
   ('config/szenarien.yaml', 'Eingeschaltete Pläne, die in der Vorschau mitlaufen.'),

@@ -4,6 +4,7 @@
 <h1>Ziele</h1>
 <p class="zweck">Wie weit du bist — heute gemessen und auf den Stichtag hochgerechnet.</p>
 
+{% if kreuzung.bedarf > 0 %}
 <div class="card">
   <div class="k klein" style="color:var(--muted);text-transform:uppercase;letter-spacing:.05em"
        title="Ab wann du nicht mehr arbeiten musst: laufendes Einkommen ohne Gehalt gegen laufenden Bedarf">Wendepunkt</div>
@@ -19,6 +20,7 @@
      der Wendepunkt, ab wann man nicht mehr MUSS. Gehalt und Einmalposten
      zaehlen deshalb nicht mit. #}
 </div>
+{% endif %}
 
 
 
@@ -179,7 +181,7 @@
   <summary>Neues Ziel</summary>
   <div class="card">
     <div class="zeilen-form">
-      <label>Name<input id="n-name" placeholder="z.B. Depot gehebelt"></label>
+      <label>Name<input id="n-name" placeholder="z.B. Neues Auto"></label>
       <label>Betrag (€)<input id="n-cents" class="betrag"></label>
       <label>Stichtag<input id="n-datum" placeholder="2035-12-31"></label>
       <label>Notiz — woher kommt die Zahl?<textarea id="n-notiz" class="notizfeld" rows="3"></textarea></label>

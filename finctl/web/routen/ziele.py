@@ -99,6 +99,9 @@ def ziele(request: Request):
             "jetzt_jahr": naechstes,
             "ende": lauf.coverage_pct(lauf.years[-1].year),
             "endjahr": lauf.years[-1].year,
+            # Ohne Ausgaben deckt jedes Einkommen den Bedarf, und "ab 2026" waere eine
+            # Behauptung ohne Grundlage.
+            "bedarf": -sum(lauf.year(naechstes).blocks.get(b, 0) for b in _jm.BEDARF),
         }
         kontenamen = {r["id"]: (r["display_name"] or r["id"]) for r in c.execute(
             "SELECT id, display_name FROM accounts")}

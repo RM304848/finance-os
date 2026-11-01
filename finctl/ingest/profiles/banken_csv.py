@@ -53,15 +53,41 @@ PROFILE: tuple[CsvProfil, ...] = (
         zeitraum=r'^"?Zeitraum:?"?;"?(?P<von>[\d.]{10})\s*-\s*(?P<bis>[\d.]{10})',
         konto_kopf=r'^"?(?:Giro)?[Kk]onto"?;"?[^"\n]*?(?P<iban>DE[\d ]{20,26})',
         quelle="an einem echten Export geprüft (09/2026)"),
+    # Die Sparkassen bieten unter Umsaetze > Export mehrere Dateiformate an
+    # (Dialog "Exportieren", Auswahl "Format"): CSV-CAMT V2, CSV-CAMT V8, CSV-MT940,
+    # CSV mit Kategorien; dazu XML (CAMT) und Text (MT940) -- und ein PDF, das
+    # der Umsatzliste. CSV-CAMT V2 und V8 haben dieselbe Kopfzeile (die
+    # Kopfzeilen stammen aus oeffentlich geposteten Exporten, siehe `quelle`),
+    # also gilt ein Profil fuer beide. Die MT940-Variante hat weniger Spalten
+    # (Kontonummer und BLZ statt IBAN und BIC, keine Referenzen) und packt
+    # Referenzen mit Kennzeichen in den Verwendungszweck.
+    CsvProfil(
+        id="sparkasse_mt940_csv", bank="Sparkasse",
+        erkennung=("Auftragskonto", "Buchungstag", "Valutadatum", "Buchungstext",
+                   "Beguenstigter/Zahlungspflichtiger", "Betrag", "BLZ"),
+        datum="Buchungstag", datumsformat="%d.%m.%y|%d.%m.%Y", wertstellung="Valutadatum",
+        betrag="Betrag", gegenpartei=("Beguenstigter/Zahlungspflichtiger",),
+        zweck=("Verwendungszweck",), zweck_kennzeichen=True, iban="Kontonummer",
+        buchungstext="Buchungstext", nur_wenn=("Info", "Umsatz gebucht"),
+        konto_spalte="Auftragskonto", saldo="keiner",
+        quelle="Kopfzeile und Aufbau nach oeffentlich geposteten Exporten "
+               "(CSV-MT940 der Sparkasse, Forum homebanking-hilfe.de; Beispieldatei "
+               "RechnungsFee/vorlagen/bank-csv); nicht an einem eigenen Export geprueft"),
     CsvProfil(
         id="sparkasse_csv", bank="Sparkasse",
         erkennung=("Auftragskonto", "Buchungstag", "Valutadatum", "Buchungstext",
-                   "Beguenstigter/Zahlungspflichtiger", "Betrag"),
+                   "Beguenstigter/Zahlungspflichtiger", "Betrag", "Kontonummer/IBAN"),
         datum="Buchungstag", datumsformat="%d.%m.%y|%d.%m.%Y", wertstellung="Valutadatum",
         betrag="Betrag", gegenpartei=("Beguenstigter/Zahlungspflichtiger",),
         zweck=("Verwendungszweck",), iban="Kontonummer/IBAN", buchungstext="Buchungstext",
         nur_wenn=("Info", "Umsatz gebucht"), konto_spalte="Auftragskonto",
-        saldo="keiner", quelle=_NACH_DOKU + " (CSV-CAMT)"),
+        nur_suchtext=("Glaeubiger ID", "Mandatsreferenz", "Kundenreferenz (End-to-End)",
+                      "Sammlerreferenz", "Lastschrift Ursprungsbetrag",
+                      "Auslagenersatz Ruecklastschrift"),
+        saldo="keiner",
+        quelle="Kopfzeile und Aufbau (CSV-CAMT V2 und V8) nach oeffentlich geposteten "
+               "Exporten (Forum forum.buhl.de, Beispieldatei RechnungsFee/vorlagen/bank-csv); "
+               "nicht an einem eigenen Export geprueft"),
     CsvProfil(
         id="volksbank_csv", bank="Volks- und Raiffeisenbanken",
         erkennung=("IBAN Auftragskonto", "Buchungstag", "Name Zahlungsbeteiligter",

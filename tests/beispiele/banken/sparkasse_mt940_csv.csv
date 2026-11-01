@@ -1,0 +1,6 @@
+"Auftragskonto";"Buchungstag";"Valutadatum";"Buchungstext";"Verwendungszweck";"Beguenstigter/Zahlungspflichtiger";"Kontonummer";"BLZ";"Betrag";"Waehrung";"Info"
+"DE89370400440532013000";"30.09.26";"30.09.26";"KARTENZAHLUNG";"Bäckerei Müller Frühstück";"Bäckerei Müller";"";"";"-12,50";"EUR";"Umsatz vorgemerkt"
+"DE89370400440532013000";"29.09.26";"29.09.26";"GUTSCHR. UEBERWEISUNG";"SVWZ+Gehalt September";"Süd-Äpfel Beispiel GmbH";"DE02100100100006820101";"PBNKDEFFXXX";"2400,00";"EUR";"Umsatz gebucht"
+"DE89370400440532013000";"28.09.26";"28.09.26";"FOLGELASTSCHRIFT";"EREF+E2E-0001MREF+M-2026-001CRED+DE98ZZZ09999999999SVWZ+Abschlag Strom September";"Stadtwerke Müllheim";"DE02100100100006820101";"PBNKDEFFXXX";"-85,00";"EUR";"Umsatz gebucht"
+"DE89370400440532013000";"15.09.26";"15.09.26";"DAUERAUFTRAG";"SVWZ+Miete Oktober Wohnung 3";"Hausverwaltung Größle";"DE02100100100006820101";"PBNKDEFFXXX";"-1500,00";"EUR";"Umsatz gebucht"
+"DE89370400440532013000";"02.09.26";"01.09.26";"GUTSCHR. UEBERWEISUNG";"SVWZ+Erstattung Zahnarzt";"Techniker Beispiel Kasse";"DE02100100100006820101";"PBNKDEFFXXX";"1200,00";"EUR";"Umsatz gebucht"

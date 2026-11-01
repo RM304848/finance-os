@@ -92,7 +92,8 @@ MODULE: tuple[Modul, ...] = (
           seiten=("/vertraege", "/abos", "/versicherungen"), dateien=("finctl/abos.py",),
           eintraege=("abos.yaml", "versicherungen.yaml")),
     Modul("energie", "Energie",
-          "Ob die Abschläge für Strom, Gas und Wasser reichen und wie lange der Vorrat hält.",
+          "Ob die Abschläge für Strom, Gas und Wasser reichen und wie lange ein Vorrat "
+          "wie Heizöl hält.",
           seiten=("/energie", "/strom"), dateien=("finctl/strom.py", "finctl/energie/"),
           eintraege=("strom.yaml", "energie.yaml")),
     Modul("geteilt", "Geteilte Ausgaben", "Wer bei gemeinsamen Ausgaben wem was schuldet.",

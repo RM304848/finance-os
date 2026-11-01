@@ -585,7 +585,8 @@ def monatsabschluss(request: Request):
         ohne_objekt = _ob.kennzahl(c, views, (yaml_lesen(_fpk) or {}) if _fpk.exists() else {})
     finally:
         c.close()
-    schritte.append(fortschritt)
+    if fortschritt:
+        schritte.append(fortschritt)
     # Aendern laesst sich ein Stand nur mit der Prognose: sie ist es, die mit
     # ihnen rechnet. Ohne sie bleibt die Pruefung, ob er alt ist.
     from finctl import module as _module
@@ -616,7 +617,8 @@ def monatsabschluss(request: Request):
         # Die erste Seite, die ein neuer Nutzer sieht. Sie sagt, wenn die
         # Einrichtung noch nicht durch ist -- statt einer Umleitung, die beim
         # zweiten Mal im Weg steht.
-        "einrichtung_offen": _einrichtung.offen(),
+        "einrichtung_offen": _einrichtung.offen()[0],
+        "einrichtung_von": _einrichtung.offen()[1],
         "gesamt": len(posten),
     })
 
@@ -737,8 +739,11 @@ _MONATE = ("", "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
            "August", "September", "Oktober", "November", "Dezember")
 
 
-def _fortschritt_zeile(c: sqlite3.Connection) -> dict:
+def _fortschritt_zeile(c: sqlite3.Connection) -> dict | None:
     """Barista FIRE heute und hochgerechnet, als eine Zeile.
+
+    Keine Zeile, wo es das Ziel nicht gibt: Wer Ziele nicht eingeschaltet hat oder keines mit
+    dieser Kennung fuehrt, soll nicht lesen, was ihm fehlt.
 
     Beide Zahlen, weil eine allein nichts sagt: der Bestand beantwortet nicht,
     ob man ankommt, und die Hochrechnung allein laesst ein kaum begonnenes
@@ -746,8 +751,12 @@ def _fortschritt_zeile(c: sqlite3.Connection) -> dict:
     """
     from datetime import date as _d
 
+    from finctl import module as _module
     from finctl.forecast import jahre as _jm
     from finctl.forecast import ziele as _ziele
+
+    if not _module.seite_an("/ziele"):
+        return None
 
     def read(name):
         p = CONFIG_DIR / name
@@ -761,9 +770,7 @@ def _fortschritt_zeile(c: sqlite3.Connection) -> dict:
     ziel = next((p for p in _ziele.progress(goals, merged, today=_d.today())
                  if p.goal_id == "barista-fire"), None)
     if ziel is None:
-        return {"id": "ziele", "titel": "Fortschritt", "ziel": "/ziele",
-                "text": "kein Barista-FIRE-Ziel eingetragen", "cents": None,
-                "warnung": False}
+        return None
     jahr = int(ziel.due.year) if ziel.due else 2045
     lauf = _jm.project(c, opening_cents=_ziele.liquid_cents(merged),
                        toepfe=_ziele.toepfe(merged),

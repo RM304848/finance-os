@@ -38,7 +38,9 @@ PROFILE_MODULES = {
     # CSV-Exporte der Banken: beschrieben, nicht programmiert. `modul:kennung`
     # zeigt auf einen Eintrag in PARSERS des Moduls.
     **{k: f"finctl.ingest.profiles.banken_csv:{k}"
-       for k in ("ing_csv", "comdirect_csv", "dkb_csv", "sparkasse_csv", "volksbank_csv",
+       for k in ("ing_csv", "comdirect_csv", "dkb_csv",
+                 # MT940 vor CAMT: dessen Kopfzeile ist eine Teilmenge der CAMT-Kopfzeile.
+                 "sparkasse_mt940_csv", "sparkasse_csv", "volksbank_csv",
                  "commerzbank_csv", "n26_csv")},
 }
 

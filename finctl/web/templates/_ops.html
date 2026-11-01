@@ -6,7 +6,7 @@
    waere nach dem ersten Wechsel gelogen. #}
 <div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap">
   <button id="btn-update" onclick="runUpdate()">Update</button>
-  <span class="muted klein">Neue PDFs einlesen, Regeln anwenden, prüfen</span>
+  <span class="muted klein">Neue Auszüge einlesen, Regeln anwenden, prüfen</span>
   <span style="flex:1"></span>
   <button id="btn-backup" onclick="runBackup()">Sichern</button>
   <span class="muted klein" id="ziel-kurz">…</span>
@@ -34,7 +34,7 @@ function eur(c){ return (c/100).toLocaleString('de-DE',
 
 async function runUpdate(){
   opsBusy('btn-update', true, 'Update');
-  opsSay('Auszüge werden eingelesen — das dauert bei vielen PDFs etwas.');
+  opsSay('Auszüge werden eingelesen — das dauert bei vielen Auszügen etwas.');
   try {
     const res = await fetch('/api/update', {method:'POST'});
     const out = await res.json();

@@ -15,6 +15,7 @@ BEISPIELE = Path("tests/beispiele/banken")
 
 
 @pytest.mark.parametrize("pid", ["ing_csv", "comdirect_csv", "dkb_csv", "sparkasse_csv",
+                                 "sparkasse_mt940_csv",
                                  "volksbank_csv", "commerzbank_csv", "n26_csv"])
 @pytest.mark.parametrize("faktor", [1, 3])
 def test_the_copy_is_still_recognised_and_still_reconciles(tmp_path, pid, faktor):

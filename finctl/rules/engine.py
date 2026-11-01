@@ -403,6 +403,12 @@ def abdeckung_map(conn: sqlite3.Connection) -> dict[str, list[tuple[str, str]]]:
 # --------------------------------------------------------------- persisting
 
 
+#: Die Tabelle `rules` kennt vier Herkuenfte; die mitgelieferte Grundschicht steht dort als
+#: `builtin`. Ohne diese Abbildung scheiterte jedes erste Update bei jedem, der die Grundschicht
+#: an hat -- und das ist die Voreinstellung eines neuen Ordners.
+_HERKUNFT_IN_DB = {"allgemein": "builtin"}
+
+
 def sync_rules_to_db(conn: sqlite3.Connection, rules: list[Rule]) -> None:
     """Mirror the YAML rulebook into the database for joins and audit."""
     conn.execute("DELETE FROM rules")
@@ -417,7 +423,7 @@ def sync_rules_to_db(conn: sqlite3.Connection, rules: list[Rule]) -> None:
                 rule.id, rule.priority, rule.name,
                 json.dumps({"match": rule.match, "set": rule.actions,
                             "split": rule.splits}, ensure_ascii=False),
-                rule.provenance, now_iso(),
+                _HERKUNFT_IN_DB.get(rule.provenance, rule.provenance), now_iso(),
             ),
         )
     conn.commit()

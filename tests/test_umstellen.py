@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -729,6 +730,10 @@ def test_the_command_refuses_a_probe_folder_inside_the_data_folder(tmp_path, mon
 
 # ------------------------------------------------- alte Form: die App haelt an
 #
+# Unter Windows nennt der Hinweis `finctl.exe`, mit dem Pfad davor.
+BEFEHL = r"finctl(\.exe)? umstellen"
+
+
 # Eine Erkennung: Was `finctl umstellen` finden wuerde, haelt die App an, und nur das.
 
 #: Die Form, in der die App nichts mehr zu melden hat.
@@ -801,7 +806,7 @@ def test_the_app_start_stops_when_umstellen_would_find_something(tmp_path, monke
     wurzel = _halteordner(tmp_path, zustand)
     _einrichten(monkeypatch, wurzel)
     vorher = _stand(wurzel)
-    with pytest.raises(umstellen.AlteFormError, match="finctl umstellen") as halt:
+    with pytest.raises(umstellen.AlteFormError, match=BEFEHL) as halt:
         nf.beim_start()
     assert ALTE_FORM[zustand][0] in str(halt.value)
     assert _stand(wurzel) == vorher
@@ -817,7 +822,7 @@ def test_init_and_the_commands_with_the_ledger_stop_too(tmp_path, monkeypatch, z
     vorher = _stand(wurzel)
     lauf = CliRunner().invoke(cli.app, befehl)
     assert lauf.exit_code == 1, lauf.output
-    assert "finctl umstellen" in lauf.output and ALTE_FORM[zustand][0] in lauf.output
+    assert re.search(BEFEHL, lauf.output) and ALTE_FORM[zustand][0] in lauf.output
     assert _stand(wurzel) == vorher
 
 
@@ -827,7 +832,7 @@ def test_the_starter_stops_before_it_sets_anything_up(tmp_path, monkeypatch):
     wurzel = _halteordner(tmp_path, "forecast_custom.yaml")
     _einrichten(monkeypatch, wurzel)
     monkeypatch.setattr(starter, "port_waehlen", lambda *_a: (8777, False))
-    with pytest.raises(SystemExit, match="finctl umstellen"):
+    with pytest.raises(SystemExit, match=BEFEHL):
         starter.main()
 
 

@@ -6,6 +6,24 @@ macht daraus beim Veröffentlichen die neue Version.
 
 ## Unveröffentlicht
 
+- **Der erste Start läuft durch:** Das erste **Update** eines neuen Datenordners brach mit einem
+  Datenbankfehler ab, sobald die mitgelieferten allgemeinen Regeln an waren (die Voreinstellung);
+  das ist behoben. Wer nur die Basis eingeschaltet hat, liest auf dem **Monatsabschluss** keine
+  Zeilen mehr zu **Planung**, **Konten** und **Fortschritt** und keine Kachel „Cashflow ohne
+  Objekte“; **Ziele** zeigt den **Wendepunkt** erst, wenn es Ausgaben gibt, und **Konten** das
+  Gemeinschaftskonto nur, wenn dort etwas gebucht ist. In der **Einrichtung** ist „Wo die Daten
+  liegen“ von Anfang an erledigt, und „Wer plant“ ist erst offen, wenn **Prognose und Planung**
+  an ist. Der Hinweis auf dem **Monatsabschluss** ist nicht mehr rot. Das **Handbuch** beginnt mit
+  dem ersten Start, die Kategorie „Katze“ heißt „Haustier“, und das Sicherungsziel sagt, dass ein
+  Cloud-Ordner den Rechner verlässt.
+- **Sparkasse: Exporte aus dem Online-Banking werden gelesen:** **CSV-CAMT V2**, **CSV-CAMT V8**
+  und **CSV-MT940** (Umsätze → Exportieren) werden beim Einlesen erkannt, mit Umlauten, vorgemerkten
+  Umsätzen und Beträgen über 1.000 €. Mandats-, Gläubiger- und Kundenreferenz gehen in den Suchtext
+  der Regeln. Vorgemerkte Umsätze werden übersprungen, und der Import sagt, wie viele. Eine Datei
+  mit Umsätzen mehrerer Konten wird abgelehnt, damit nichts im falschen Konto landet. Der
+  Monatsabschluss meldet bei Sparkasse-Konten keine „Lücke“ mehr, nur weil die Datei keinen Saldo
+  trägt, und hält einen Monat für vollständig, wenn die letzte Buchung am Freitag vor dem
+  Wochenende zum Monatsende lag.
 - **Konten und Hochrechnung rechnen aus denselben Eingaben:** Bisher zeigten **Konten** (Monat für
   Monat, 60 Monate weit) und **Hochrechnung** und **Ziele** (Jahr für Jahr) verschiedene Zahlen
   für denselben Haushalt, weil sie ihre Eingaben verschieden lasen. Jetzt nehmen beide dieselben:

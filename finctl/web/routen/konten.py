@@ -48,7 +48,8 @@ def _diagramm_ohne_objekt(ob: dict):
         f"Cashflow ohne {ob['label']}", [m.monat for m in monate], "Cashflow", balken,
         legende=legende, grenzen=[_dg.Grenze("Ziel", ziel, "--ink")] if ziel else [],
         zusatz=[_dg.Linie("Gemeinschaftskonto", "--muted",
-                          [m.gemeinschaftskonto_cents for m in monate])],
+                          [m.gemeinschaftskonto_cents for m in monate])]
+        if any(m.gemeinschaftskonto_cents for m in monate) else [],
         untertitel="je Monat, in €")
 
 

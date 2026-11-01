@@ -33,6 +33,7 @@ es gibt, wer plant und was die App zeigen soll.</p>
        faerbt den LINKEN RAND eines Hinweiskastens, und an einer runden Pill
        wurde daraus eine Klammer vor dem Wort. #}
     <td>{% if s.fertig %}<span class="pos">ja</span>
+        {%- elif s.noetig is defined and not s.noetig %}<span class="muted">später</span>
         {%- else %}<span class="neg">offen</span>{% endif %}</td>
   </tr>
   {% endfor %}

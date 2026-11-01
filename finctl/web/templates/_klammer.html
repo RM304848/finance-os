@@ -194,7 +194,7 @@
              Messfenster; Text und Kategorie lassen sich frei aendern, Ein- und
              Ausgaenge kommen beide. #}
           <form class="suchzeile" onsubmit="event.preventDefault();buchungSuchen('{{ zid }}')">
-            <input id="bq-{{ zid }}" data-no-combo placeholder="Text, etwa bundeskasse">
+            <input id="bq-{{ zid }}" data-no-combo placeholder="Text, etwa Telefon">
             <select id="bk-{{ zid }}" data-placeholder="alle Kategorien">
               <option value="">alle Kategorien</option>
               {% for c in categories %}<option value="{{ c.id }}"

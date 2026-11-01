@@ -179,7 +179,10 @@ def test_the_page_names_the_stichtag_when_statements_are_still_missing(verlauf, 
         return dataclasses.replace(
             w, erwartet=ag.folgetag(ag.folgetag(w.stichtag)) - timedelta(days=1))
 
-    assert not _abschnitt().abweichend
+    # Heute ist der Tag nach dem Stichtag der Daten, nicht das Datum des Laufs:
+    # am Ersten eines Monats erwartet der Abschluss sonst schon den naechsten.
+    stichtag, _ = _stichtage()
+    assert not _abschnitt(ag.folgetag(stichtag)).abweichend
     monkeypatch.setattr(ma, "wirkung", verspaetet)
     seite = client.get("/monatsabschluss").text
     assert "die Auszüge reichen erst bis" in seite

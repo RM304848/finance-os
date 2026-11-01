@@ -62,6 +62,10 @@ class CsvProfil:
     gegenpartei_eingang: tuple[str, ...] = ()
     #: Diese Spalten ergeben zusammen den Verwendungszweck.
     zweck: tuple[str, ...] = ()
+    #: Der Verwendungszweck traegt Kennzeichen (`EREF+`, `MREF+`, `CRED+`, `SVWZ+`, ...),
+    #: wie im SEPA-Datensatz der MT940-Exporte. Der Zweck ist dann nur der
+    #: Text hinter `SVWZ+`; der ganze Text bleibt im Suchtext der Regeln.
+    zweck_kennzeichen: bool = False
     iban: str | None = None
     buchungstext: str | None = None
     #: Nur Zeilen, in denen diese Spalte diesen Wert hat (gebucht statt vorgemerkt).
@@ -146,6 +150,24 @@ def _datum(roh: str, formate: str) -> str:
     raise ValueError(f"kein Datum im Format {formate}: {roh!r}")
 
 
+_KENNZEICHEN = re.compile(r"(?:EREF|KREF|MREF|CRED|DEBT|SVWZ|ABWA|ABWE|BREF|COAM|OAMT|IBAN|BIC)\+")
+
+
+def _verwendungszweck(roh: str) -> str:
+    """Der Text hinter `SVWZ+` -- ohne Kennzeichen im Zweck bleibt der Zweck, wie er ist.
+
+    Die Kennzeichen stehen ohne Trenner hintereinander
+    (`EREF+x1MREF+m2CRED+DE98ZZZ0SVWZ+Miete`); der Verwendungszweck ist das,
+    was hinter `SVWZ+` bis zum naechsten Kennzeichen steht.
+    """
+    treffer = list(_KENNZEICHEN.finditer(roh))
+    zweck = next((t for t in treffer if t.group(0) == "SVWZ+"), None)
+    if zweck is None:
+        return roh
+    ende = next((t.start() for t in treffer if t.start() > zweck.start()), len(roh))
+    return roh[zweck.end():ende].strip()
+
+
 def _suchen(muster: str | None, text: str) -> re.Match | None:
     return re.search(muster, text, re.M) if muster else None
 
@@ -182,21 +204,37 @@ class CsvBankParser:
             i = index.get(name.casefold())
             return zellen[i].strip() if i is not None and i < len(zellen) else ""
 
-        roh = []
+        roh, vorgemerkt = [], 0
         for zeile in zeilen[kopf + 1:]:
             zellen = _zellen(zeile, p.trenner)
             if len(zellen) < len(spalten) // 2 or not wert(zellen, p.datum):
                 continue                       # Leerzeile, Fusszeile, Saldozeile
-            if p.datum_offen and wert(zellen, p.datum).casefold() == p.datum_offen.casefold():
-                continue
-            if p.nur_wenn and wert(zellen, p.nur_wenn[0]).casefold() != p.nur_wenn[1].casefold():
-                continue
-            try:
-                _datum(wert(zellen, p.datum), p.datumsformat)
-            except ValueError:
-                continue                       # eine Zeile, die kein Umsatz ist
-            roh.append(zellen)
-        return self._ergebnis(roh, wert, text, "\n".join(zeilen[:kopf]), path)
+            gebucht = self._gebucht(zellen, wert)
+            vorgemerkt += gebucht is False
+            if gebucht:
+                roh.append(zellen)
+        ergebnis = self._ergebnis(roh, wert, text, "\n".join(zeilen[:kopf]), path)
+        if vorgemerkt:
+            ergebnis.warnings.append(
+                f"{vorgemerkt} Umsatz/Umsätze noch nicht gebucht (vorgemerkt) und nicht "
+                "übernommen: der nächste Export bringt sie gebucht")
+        return ergebnis
+
+    def _gebucht(self, zellen, wert) -> bool | None:
+        """Ist die Zeile ein gebuchter Umsatz? None: gar kein Umsatz (Datum fehlt).
+
+        False heisst vorgemerkt -- der Aufrufer zaehlt sie, damit der Import
+        sagen kann, was er nicht uebernommen hat.
+        """
+        p = self.profil
+        if p.datum_offen and wert(zellen, p.datum).casefold() == p.datum_offen.casefold():
+            return False
+        try:
+            _datum(wert(zellen, p.datum), p.datumsformat)
+        except ValueError:
+            return None                        # eine Zeile, die kein Umsatz ist
+        return not (p.nur_wenn
+                    and wert(zellen, p.nur_wenn[0]).casefold() != p.nur_wenn[1].casefold())
 
     def _betrag_der_zeile(self, z, wert) -> int:
         p = self.profil
@@ -224,14 +262,15 @@ class CsvBankParser:
             quellen = (p.gegenpartei_eingang if betrag > 0 and p.gegenpartei_eingang
                        else p.gegenpartei)
             gegen = next((wert(z, s) for s in quellen if wert(z, s)), "")
-            zweck = " ".join(wert(z, s) for s in p.zweck if wert(z, s))
+            zweck_roh = " ".join(wert(z, s) for s in p.zweck if wert(z, s))
+            zweck = _verwendungszweck(zweck_roh) if p.zweck_kennzeichen else zweck_roh
             art = wert(z, p.buchungstext)
             txns.append(RawTxn(
                 booking_date=_datum(wert(z, p.datum), p.datumsformat),
                 value_date=(_datum(wert(z, p.wertstellung), p.datumsformat)
                             if wert(z, p.wertstellung) else None),
                 amount_cents=betrag,
-                raw_text=" ".join(t for t in (art, gegen, zweck, *(
+                raw_text=" ".join(t for t in (art, gegen, zweck_roh, *(
                     f"{s}: {wert(z, s)}" for s in p.nur_suchtext if wert(z, s))) if t),
                 counterparty=gegen or None,
                 counterparty_iban=(wert(z, p.iban).replace(" ", "") or None) if p.iban else None,
@@ -263,6 +302,7 @@ class CsvBankParser:
                                  "den nächsten Export, der an diesem Tag beginnt")
         # Die eigene IBAN: aus dem Vorspann, aus einer Spalte je Zeile, oder
         # die erste deutsche IBAN vor der Tabelle.
+        self._ein_konto(roh, wert)
         treffer = _suchen(p.konto_kopf, vorspann)
         konto = (treffer.group("iban").replace(" ", "") if treffer
                  else wert(roh[0], p.konto_spalte).replace(" ", "") if p.konto_spalte
@@ -272,7 +312,18 @@ class CsvBankParser:
                 account_hint=konto or p.bank,
                 period_start=von, period_end=bis,
                 balance_start_cents=anfang, balance_end_cents=ende),
-            transactions=txns, warnings=warnungen)
+            transactions=txns, warnings=warnungen,
+            reconcile_basis="ohne_saldo" if p.saldo == "keiner" else "booking")
+
+    def _ein_konto(self, roh, wert) -> None:
+        """Eine Datei, ein Konto: sonst landeten fremde Umsaetze im falschen Konto."""
+        if not self.profil.konto_spalte:
+            return
+        konten = {wert(z, self.profil.konto_spalte).replace(" ", "") for z in roh} - {""}
+        if len(konten) > 1:
+            raise ValueError(
+                f"{self.profil.bank}: die Datei enthält Umsätze von {len(konten)} Konten "
+                f"({', '.join(sorted(konten))}). Jedes Konto einzeln exportieren.")
 
     def _zeitraum(self, vorspann: str, txns, warnungen) -> tuple[str, str] | None:
         """Der Zeitraum, den die Bank im Vorspann nennt -- None ohne ihn.

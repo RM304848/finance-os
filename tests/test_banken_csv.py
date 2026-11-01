@@ -23,6 +23,7 @@ ERWARTET = {
     "comdirect_csv": (2, 100000, 115550, None, "kopf"),
     "dkb_csv": (2, 51000, 242234, "Supermarkt Muster", "ende"),
     "sparkasse_csv": (2, 0, 3001, "Telefon Muster GmbH", "keiner"),
+    "sparkasse_mt940_csv": (4, 0, 201500, "Stadtwerke Müllheim", "keiner"),
     "volksbank_csv": (2, 200000, 149260, "Bäckerei Muster", "spalte"),
     "commerzbank_csv": (2, 0, 174000, None, "keiner"),
     "n26_csv": (2, 0, 23710, "Buchhandlung Muster", "keiner"),
@@ -56,7 +57,8 @@ def test_the_sample_reconciles_and_skips_what_is_not_booked(pid):
     if gegenpartei:
         assert gegenpartei in {t.counterparty for t in ergebnis.transactions}
     # Ohne vollstaendigen Saldo sagt der Import, was er nicht pruefen konnte.
-    assert bool(ergebnis.warnings) == (quelle in ("ende", "keiner"))
+    saldo = [w for w in ergebnis.warnings if "vorgemerkt" not in w]
+    assert bool(saldo) == (quelle in ("ende", "keiner"))
 
 
 def test_an_incoming_payment_at_dkb_names_the_payer_not_the_owner():
@@ -107,7 +109,7 @@ def test_a_balance_dated_after_the_range_is_refused(tmp_path):
 
 
 def test_the_own_account_is_read_from_the_export():
-    for pid in ("ing_csv", "dkb_csv", "sparkasse_csv", "volksbank_csv"):
+    for pid in ("ing_csv", "dkb_csv", "sparkasse_csv", "sparkasse_mt940_csv", "volksbank_csv"):
         pfad = BEISPIELE / f"{pid}.csv"
         kopf = load_parser(pid).parse(extract_pages(pfad), pfad).header
         assert kopf.account_hint == "DE89370400440532013000", pid

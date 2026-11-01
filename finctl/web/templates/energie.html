@@ -111,7 +111,7 @@
 {% block body %}
 <h1>Energie {% if zaehler %}<span class="muted zusatz">— {{ zaehler.name }}{% if aktuell %}: {{ aktuell.zeitraum.anbieter ~ ', ' if aktuell.zeitraum.anbieter }}{{ tag(aktuell.zeitraum.beginn) }} bis {{ tag(aktuell.zeitraum.ende) }}{% endif %}</span>
   {%- elif vorrat %}<span class="muted zusatz">— {{ vorrat.name }}</span>{% endif %}</h1>
-<p class="zweck">Wohin führt der Verbrauch bis zum Abrechnungsende, reicht der Abschlag, und wie lange reicht der Vorrat?</p>
+<p class="zweck">Wohin führt der Verbrauch bis zum Abrechnungsende, reicht der Abschlag, und wie lange reicht ein Vorrat wie Heizöl?</p>
 {{ rt.reiter(reiter, ansicht) }}
 
 {% if fehler %}<div class="note bad">config/strom.yaml oder config/energie.yaml ist nicht lesbar: {{ fehler }}</div>{% endif %}

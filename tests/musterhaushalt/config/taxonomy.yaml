@@ -166,7 +166,7 @@ management:
       fixkosten-partner:  {name: Fixkosten Partner, fix: true}
       gemeinschaftskonto: Gemeinschaftskonto
       eltern:             Eltern
-      katze:              Katze
+      haustier:           Haustier
       unterstuetzung:     Unterstützung
 
   transfer:

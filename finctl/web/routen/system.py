@@ -53,8 +53,12 @@ async def api_backup(request: Request):
         body = await request.json()
     try:
         return ops.write_backup(Path(body["to"]) if body.get("to") else None)
-    except ops.KeinBackupZielError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+    except ops.KeinBackupZielError:
+        # Die Meldung der Bibliothek nennt die Datei; wer hier klickt, traegt das Ziel in der
+        # Oberflaeche ein und hat nie von backup.yaml gehoert.
+        return JSONResponse({"error": "Es ist noch kein Sicherungsziel eingetragen. Trag unter "
+                                      "„Wohin gesichert wird“ einen Ordner ein."},
+                            status_code=400)
     except FileNotFoundError:
         return JSONResponse({"error": "no database to back up"}, status_code=400)
     except OSError as exc:

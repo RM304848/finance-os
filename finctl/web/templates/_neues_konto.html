@@ -72,10 +72,10 @@ function neuSperren(){
 function neuOrdner(){
   const roh = (nf('ordner').value || '').trim();
   const name = roh || (nf('id').value || '').trim() || 'kennung';
-  const voll = roh.startsWith('/') || roh.startsWith('~');
+  const voll = /^([\/\\~]|[A-Za-z]:[\\\/])/.test(roh);   // /…  ~…  \\Server  C:\…
   nf('ordner-text').textContent = 'Auszüge liegen in ' +
     (voll ? roh + ' — außerhalb des Datenordners, nicht im Backup'
-          : STATEMENTS + '/' + name);
+          : STATEMENTS + (STATEMENTS.includes('\\') ? '\\' : '/') + name);
 }
 
 async function kontoAnlegen(){

@@ -15,8 +15,8 @@
    Umleitung steht beim zweiten Mal im Weg, ein Hinweis verschwindet von
    selbst, sobald die drei Fragen beantwortet sind. #}
 {% if einrichtung_offen %}
-<div class="note bad">Die Einrichtung ist noch nicht fertig —
-  {{ einrichtung_offen }} von 3 Fragen offen.
+<div class="note">Die Einrichtung ist noch nicht fertig —
+  {{ einrichtung_offen }} von {{ einrichtung_von }} Fragen offen.
   <a class="plain" href="/einrichtung">Einrichtung öffnen →</a></div>
 {% endif %}
 
@@ -44,12 +44,14 @@
   <a class="card" href="{{ vorjahr }}saldo"><div class="k">Saldo {{ k.jahr }}</div>
     <div class="v {{ (k.einnahmen + k.ausgaben)|vz }}">{{ (k.einnahmen + k.ausgaben)|euro }}</div>
     <div class="muted klein">ohne Investments und einmalige Objektkosten</div></a>
+  {% if 'prognose' in aktive_module() %}
   {% set ob = ohne_objekt %}
   <a class="card" href="/konten#ohne-objekt"><div class="k">Cashflow ohne {{ ob.label }}{% if ob.letzter %} · {{ ob.letzter.monat.strftime('%Y-%m') }}{% endif %}</div>
     {% if ob.letzter %}
     <div class="v {{ 'pos' if ob.letzter.cents >= ob.ziel_cents else 'neg' }}">{{ ob.letzter.cents|euro }}</div>
     {% else %}<div class="v muted">—</div>{% endif %}
     <div class="muted klein">Prognose Ø <span class="{{ (ob.schnitt_prognose_cents or 0)|vz }}">{{ (ob.schnitt_prognose_cents or 0)|euro }}</span></div></a>
+  {% endif %}
   {# Zwei Listen, zwei Links: die Kachel selbst fuehrt nirgends hin. #}
   <div class="card"><div class="k">Transaktionen offen</div>
     <div class="v">{{ k.review + k.flagged }}</div>
@@ -592,7 +594,7 @@ function wirkungZeigen(id){
   ('config/accounts.yaml', 'Welche Konten einen Auszug liefern müssen.'),
   ('config/backup.yaml', 'Wohin das Backup schreibt und wie viele Stände bleiben.'),
   ('config/szenarien.yaml', 'Welche Pläne eingeschaltet sind.'),
-  ('config/goals.yaml', 'Das Barista-FIRE-Ziel in der Fortschrittszeile.'),
+  ('config/goals.yaml', 'Das Ziel mit der Kennung barista-fire, wenn es eins gibt: seine Fortschrittszeile.'),
   ('config/forecast.yaml', 'Die Kontenvorschau in der Ablaufzeile.'),
   ('finctl/web/templates/monatsabschluss.html', 'Die Texte dieser Seite.'),
 ], handbuch='monatsabschluss') }}

@@ -43,7 +43,7 @@ STELLSCHRAUBEN = (
     ("kostenschwelle_pa", "Kostenschwelle für Policen", "prozent",
      "Monatsabschluss: Warnzeichen an Policen mit höheren Effektivkosten."),
     ("gehalt_steigerung_pa", "Gehaltssteigerung p.a.", "prozent",
-     "Ziele. Die grösste Einzelwirkung von allen."),
+     "Ziele. Die größte Einzelwirkung von allen."),
     ("salary_floor_cents", "Gehalts-Untergrenze", "euro",
      "Konten und Ziele. Das Gehalt, mit dem beide rechnen; es wächst mit der Gehaltssteigerung."),
     ("teilzeit_anteil", "Teilzeit: Anteil am Gehalt", "prozent",

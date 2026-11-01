@@ -19,6 +19,33 @@ Rechenhilfen ohne Gewähr, keine Steuer- oder Anlageberatung.
 
 ---
 
+## 0. Der erste Start
+
+Beim ersten Öffnen steht die **Einrichtung** da, mit leerem Datenordner. Alles bleibt auf
+deinem Rechner; die App braucht kein Konto und keine Verbindung zur Bank. Der Weg zur ersten
+Auswertung:
+
+1. **Konto anlegen.** Unter „3 — Welche Konten es gibt“ eine Datei aus dem Online-Banking
+   wählen und **Erkennen** drücken. Bei der Sparkasse ist es der CSV-Export der Umsätze
+   („CSV-CAMT V2“). Die App nennt Bank, Konto und Zeitraum; **Neues Konto damit** füllt das
+   Formular, **Anlegen** speichert es und legt die Datei im Auszugsordner des Kontos ab.
+2. **Sicherung eintragen.** Unter „2 — Wohin gesichert wird“ einen Ordner wählen, am besten
+   auf einer externen Platte oder einem USB-Stick. Liegt er in einem Cloud-Dienst, verlässt die
+   Sicherung deinen Rechner: sie enthält deine Konfiguration und die Datenbank mit allen
+   Buchungen, unverschlüsselt.
+3. **Update.** Auf dem **Monatsabschluss** liest **Update** die abgelegten Auszüge ein und
+   wendet die Regeln an. Danach steht unter **Transaktionen → Offen**, was keine Regel erkannt
+   hat; dort die Kategorie wählen. Gemerkt wird jede Entscheidung, auch beim nächsten Update.
+4. **Jeden Monat wieder:** den neuen Export im Online-Banking holen, in der Einrichtung bei
+   **Erkennen** wählen und im Konto ablegen, **Update** drücken, Offenes zuordnen, **Sichern**.
+
+Angezeigt ist zunächst nur die Basis: Konten, Auszüge, Kategorien und Regeln, Rückblick.
+Verträge, Kredite, Immobilien, Prognose und Ziele schaltest du unter „5 — Was die App zeigen
+soll“ dazu, wenn du sie brauchst; Ausschalten blendet nur aus und löscht nichts. Die Befehle
+in den folgenden Abschnitten sind für alle, die lieber im Terminal arbeiten.
+
+---
+
 ## 1. Der Monatsablauf
 
 Vier Befehle, in dieser Reihenfolge. Zusammen unter einer Minute.
@@ -35,7 +62,8 @@ Der Befehl nennt den Ordner **und warum er es ist** — das ist die Auskunft, di
 braucht, wenn plötzlich ein leeres Hauptbuch aufgeht. Es gibt vier Regeln, in dieser
 Reihenfolge: die Variable `FINCTL_DATEN`, der eingetragene Ort
 (`finctl ort --setzen <ordner>`), ein `config/` im aktuellen Verzeichnis, und sonst
-die Vorgabe des Systems (`~/Library/Application Support/Finance OS`).
+die Vorgabe des Systems (macOS: `~/Library/Application Support/Finance OS`, Windows:
+`%APPDATA%\Finance OS`).
 
 Ohne eigene Angabe greift die letzte: der Systemordner. Dann arbeitet `finctl`
 von jedem Verzeichnis aus mit denselben Daten, und die Beispiele unten laufen
@@ -48,14 +76,14 @@ Läuft das Dashboard (`finctl serve`), reicht die **Monatsabschluss**-Seite:
 
 | Knopf | was er tut |
 |---|---|
-| **Update** | Neue PDFs einlesen, Regeln anwenden, Vorgänge zuordnen, prüfen — die Schritte 2 bis 4 unten |
+| **Update** | Neue Auszüge einlesen, Regeln anwenden, Vorgänge zuordnen, prüfen — die Schritte 2 bis 4 unten |
 | **Sichern** | Einen Stand in den Sicherungsordner schreiben |
 
 Beide melden das Ergebnis darunter, inklusive abgelehnter Auszüge und Lücken in
-der Auszugskette. PDFs vorher ablegen (Schritt 1). Die Terminalvariante darunter
+der Auszugskette. Auszüge vorher ablegen (Schritt 1). Die Terminalvariante darunter
 tut dasselbe und ist die Rückfallebene, wenn das Dashboard nicht läuft.
 
-**1. Auszüge ablegen.** PDFs in den Ordner des jeweiligen Kontos, Dateiname egal —
+**1. Auszüge ablegen.** CSV- oder PDF-Dateien in den Ordner des jeweiligen Kontos, Dateiname egal —
 identifiziert wird über den SHA-256 des Inhalts, dieselbe Datei zweimal ablegen
 schadet also nicht.
 
@@ -65,11 +93,8 @@ finctl ort        # der Datenordner; die Auszuege liegen darin unter data/statem
 
 | Konto | Ordner |
 |---|---|
-| DKB Giro | `data/statements/dkb-giro/` |
-| Trade Republic | `data/statements/trade-republic/` |
-| C24 | `data/statements/c24/` |
-| Sparda | `data/statements/sparda/` |
-| Scalable Tagesgeld | `data/statements/scalable_tg/` |
+| Sparkasse Giro | `data/statements/sparkasse-giro/` |
+| Tagesgeld bei einer Bank | `data/statements/tagesgeld/` |
 
 **2. Einlesen.**
 
@@ -96,7 +121,7 @@ finctl validate
 ```
 
 Muss `All invariants hold.` sagen. Meldet es eine Lücke in der Auszugskette, fehlt
-ein PDF — die Kette verlangt, dass der Endsaldo eines Auszugs der Anfangssaldo des
+ein Auszug — die Kette verlangt, dass der Endsaldo eines Auszugs der Anfangssaldo des
 nächsten ist.
 
 **5. Nacharbeiten im Dashboard.**
@@ -535,7 +560,7 @@ finctl init && finctl ingest run && finctl categorize && finctl validate
 | Symptom | Ursache | Abhilfe |
 |---|---|---|
 | `rejected` beim Einlesen | Saldo geht nicht auf | Der Auszug bleibt draußen. Parser prüfen, oder Sonderfall in `adjustments.yaml`. |
-| `gap on <konto>` | Auszug fehlt in der Kette | Fehlendes PDF nachlegen. |
+| `gap on <konto>` | Auszug fehlt in der Kette | Fehlenden Auszug nachlegen. |
 | Viele Buchungen unter Offen | Neuer Zahlungsempfänger | Regel schreiben oder im Dashboard einzeln zuordnen. |
 | „Regeln, denen du widersprichst" | Dieselbe Regel oft korrigiert | Die Regel ist falsch. Knopf **Regel ändern** oder `rules.yaml` bearbeiten. |
 | Kategorie verschwunden | Umbenannt ohne Migration | Eintrag in `taxonomy_migrations.yaml` unter `remap:`. |
@@ -564,7 +589,7 @@ Ein abgebrochener Lauf hinterlässt deshalb nichts in den echten Dateien, und ei
 laufendes Dashboard sieht keine Testzahlen. Einen einzelnen Test ohne Parallelstart:
 `-n 0 tests/test_x.py::test_y`.
 
-Darunter: der Tilgungsplan gegen das Forward-Angebot der Sparda auf den Cent, die
+Darunter: der Tilgungsplan gegen das Forward-Angebot einer Bank auf den Cent, die
 Reconciliation-Schranke, dass zweimaliges Kategorisieren identische Splits ergibt,
 und der **Referenzstand** (`tests/referenz.py`): ein Neuaufbau aus `config/` und den
 Auszügen muss Hauptbuch und jede Seite Zeile für Zeile so ergeben wie festgehalten.
@@ -731,6 +756,12 @@ ein Auszug gelesen wird und wo er liegt.
   Beschrieben sind die CSV-Exporte von ING, comdirect, DKB, Sparkasse, Volks- und
   Raiffeisenbanken, Commerzbank und N26, nach Beschreibung, noch nicht an echten
   Exporten geprüft.
+  **Sparkasse:** im Online-Banking unter *Umsätze → Exportieren* das Format **CSV-CAMT V2**
+  oder **CSV-CAMT V8** wählen (gleiche Spalten), ersatzweise **CSV-MT940**; je Konto eine
+  Datei, den Zeitraum bis zum Monatsletzten (oder bis heute). Das PDF der Umsatzliste und
+  „CSV mit Kategorien“ liest die App nicht. Die Sparkasse-CSV trägt keinen Saldo: die App
+  sagt das beim Einlesen, und ein Kontostand lässt sich daraus nicht prüfen. Vorgemerkte
+  Umsätze fehlen, bis sie gebucht sind; der nächste Export bringt sie.
 - **Spalten zuordnen:** kennt die App einen CSV-Export nicht, schlägt sie vor, welche
   Spalte Datum, Betrag, Gegenpartei und Saldo ist. Nach der Vorschau wird daraus ein
   eigenes Profil in `config/csv_profile_custom.yaml`; ab dann wird die Bank erkannt.

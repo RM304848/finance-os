@@ -47,7 +47,7 @@ class ParseResult:
     # the 1st itself -- the opening is the balance at the end of that day.
     # Reconciling such a statement on booking dates fails by exactly the
     # value of those lines.
-    reconcile_basis: str = "booking"        # 'booking' | 'value'
+    reconcile_basis: str = "booking"        # 'booking' | 'value' | 'ohne_saldo'
 
 
 @runtime_checkable

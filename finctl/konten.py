@@ -38,6 +38,12 @@ DATEI = "accounts.yaml"
 
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 
+#: Namen, die Windows nicht als Ordner zulaesst. Die Kennung ist der Standardname des
+#: Auszugsordners, und ein Konto "con" liesse sich dort weder anlegen noch einlesen.
+_WINDOWS_GERAETE = frozenset({"con", "prn", "aux", "nul",
+                              *(f"com{i}" for i in range(1, 10)),
+                              *(f"lpt{i}" for i in range(1, 10))})
+
 #: Was ein Konto ist. `loan` ist ein Kredit, der als Konto gefuehrt wird.
 ARTEN = ("giro", "tagesgeld", "depot", "broker", "credit_card", "loan")
 
@@ -123,17 +129,24 @@ def eigener_pfad(konto: dict) -> bool:
 
 # ------------------------------------------------------------------ pruefen
 
+def _kennung_fehler(kennung: str, vergeben: set[str]) -> str | None:
+    if kennung in _notizen.RESERVIERT:
+        return f"Kennung „{kennung}“ ist für Notizen reserviert"
+    if not _ID.match(kennung):
+        return "Kennung: klein, Ziffern und Bindestriche, höchstens 41 Zeichen"
+    if kennung in _WINDOWS_GERAETE:
+        return f"Kennung „{kennung}“ ist unter Windows kein Ordnername"
+    if kennung in vergeben:
+        return f"Kennung „{kennung}“ ist schon vergeben"
+    return None
+
+
 def pruefen(konto: dict, vergeben: set[str]) -> list[str]:
     """Was an diesem Konto nicht stimmt, in Worten. Leer heisst: in Ordnung."""
     fehler = []
     kennung = str(konto.get("id") or "").strip()
-    if kennung in _notizen.RESERVIERT:
-        fehler.append(f"Kennung „{kennung}“ ist für Notizen reserviert")
-    elif not _ID.match(kennung):
-        fehler.append("Kennung: klein, Ziffern und Bindestriche, "
-                      "höchstens 41 Zeichen")
-    elif kennung in vergeben:
-        fehler.append(f"Kennung „{kennung}“ ist schon vergeben")
+    if grund := _kennung_fehler(kennung, vergeben):
+        fehler.append(grund)
     if not str(konto.get("display_name") or "").strip():
         fehler.append("Anzeigename fehlt")
     if not str(konto.get("institution") or "").strip():

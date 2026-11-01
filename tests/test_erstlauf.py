@@ -137,3 +137,84 @@ def test_every_page_in_the_navigation_answers(frisch):
     assert not kaputt, (
         "Diese Seiten überleben den ersten Start nicht:\n  "
         + "\n  ".join(f"{ziel}: {stand}" for ziel, stand in sorted(kaputt.items())))
+
+
+_PROBE_ERSTER_MONAT = r"""
+import json, pathlib, re, shutil, tempfile
+from finctl.web import auth
+auth.PFAD = pathlib.Path(tempfile.mkdtemp()) / "server.yaml"
+from fastapi.testclient import TestClient
+from finctl import konten, module
+from finctl.web.server import app
+
+cl = TestClient(app, raise_server_exceptions=False)
+ergebnis = {}
+neu = cl.post("/api/konto-neu", json={
+    "id": "giro-neu", "display_name": "Giro", "institution": "Sparkasse",
+    "account_type": "giro", "ingest_mode": "parsed", "parser_profile": "sparkasse_csv"})
+ergebnis["konto"] = neu.status_code
+konto = next(k for k in konten.laden() if k["id"] == "giro-neu")
+ordner = konten.auszugsordner(konto)
+ordner.mkdir(parents=True, exist_ok=True)
+shutil.copy("tests/beispiele/banken/sparkasse_csv.csv", ordner / "export.csv")
+
+# Das ist der erste Klick jedes Neulings auf "Update": einlesen, Regeln anwenden, pruefen.
+antwort = cl.post("/api/update")
+ergebnis["update"] = antwort.status_code
+ergebnis["update_text"] = antwort.text[:300]
+if antwort.status_code == 200:
+    ergebnis["importiert"] = antwort.json()["ingest"]["imported"]
+
+# Und danach, mit Daten statt mit nichts: Basis allein, dann alles.
+vorlage = pathlib.Path("finctl/web/templates/base.html").read_text(encoding="utf-8")
+kopf = vorlage[vorlage.index("<header>"):vorlage.index("</header>")]
+ziele = list(dict.fromkeys(["/"] + re.findall(r'href="(/[^"{]*)"', kopf)))
+seiten, texte = {}, {}
+for name, wahl in (("basis", {m.id: False for m in module.MODULE}),
+                   ("alles", {m.id: True for m in module.MODULE})):
+    module.setzen(wahl)
+    for ziel in ziele:
+        # Eine Seite eines ausgeschalteten Moduls gibt es nicht: 404 ist dort die richtige Antwort.
+        erwartet = 200 if module.seite_an(ziel) else 404
+        antwort_seite = cl.get(ziel)
+        seiten[f"{name} {ziel}"] = [antwort_seite.status_code, erwartet]
+        texte[f"{name} {ziel}"] = antwort_seite.text
+ergebnis["seiten"] = seiten
+# Was ein Neuling NICHT lesen soll: Urteile und Namen ohne Grundlage in seinen Daten.
+ohne_grundlage = {
+    "basis /monatsabschluss": ["keine eingeschaltet", "zwoelf", "Barista", "Cashflow ohne",
+                               "PDFs", "note bad\">Die Einrichtung"],
+    "alles /monatsabschluss": ["zwoelf", "Barista", "kein Barista", "note bad\">Die Einrichtung"],
+    "alles /ziele": ["Wendepunkt"],
+    "alles /konten": ["Gemeinschaftskonto"],
+}
+ergebnis["zu_viel"] = {k: [w for w in worte if w in texte.get(k, "")]
+                       for k, worte in ohne_grundlage.items()}
+print("###" + json.dumps(ergebnis))
+"""
+
+
+def test_the_first_update_and_every_page_afterwards_work(frisch):
+    """Der erste Monat eines Neulings: Konto anlegen, Auszug einlesen, Update.
+
+    Gemessen am 01.11.2026 in der App mit leerem Ordner: Das Konto liess sich
+    anlegen, die Datei wurde erkannt -- und der erste Klick auf "Update" endete
+    mit einem Datenbankfehler. Die mitgelieferte Grundschicht der Regeln trug
+    eine Herkunft, die die Tabelle `rules` nicht kennt; wer sie an hat (die
+    Voreinstellung), kam nie ueber das erste Update hinaus. Alle anderen Tests
+    liefen ohne Grundschicht oder ohne Update und merkten nichts.
+    """
+    _, umgebung = frisch
+    fertig = subprocess.run([sys.executable, "-c", _PROBE_ERSTER_MONAT], cwd=WURZEL,
+                            env=umgebung, capture_output=True, text=True, check=False)
+    assert "###" in fertig.stdout, fertig.stderr[-2000:]
+    ergebnis = json.loads(fertig.stdout.split("###", 1)[1].splitlines()[0])
+
+    assert ergebnis["konto"] == 200, ergebnis
+    assert ergebnis["update"] == 200, ergebnis["update_text"]
+    assert ergebnis["importiert"] == 1, ergebnis
+    kaputt = {z: s[0] for z, s in ergebnis["seiten"].items() if s[0] != s[1]}
+    assert not kaputt, "Mit Daten antworten diese Seiten nicht:\n  " + "\n  ".join(
+        f"{z}: {s}" for z, s in sorted(kaputt.items()))
+    zu_viel = {k: w for k, w in ergebnis["zu_viel"].items() if w}
+    assert not zu_viel, f"Das gehoert nicht in die ersten Tage eines Neulings: {zu_viel}"

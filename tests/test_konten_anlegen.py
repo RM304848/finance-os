@@ -178,3 +178,10 @@ def test_the_endpoint_refuses_a_broken_account_without_writing():
                                 "account_type": "giro", "ingest_mode": "summary"})
     assert antwort.status_code == 400
     assert "Kennung" in antwort.json()["error"]
+
+
+def test_a_windows_device_name_is_no_account_id():
+    """Die Kennung wird zum Ordnernamen, und `con` oder `nul` ist unter Windows keiner."""
+    for kennung in ("con", "nul", "com1", "lpt9"):
+        assert any("Windows" in f for f in konten.pruefen({**BEISPIEL, "id": kennung}, set()))
+    assert not konten.pruefen({**BEISPIEL, "id": "console"}, set())

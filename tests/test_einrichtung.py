@@ -164,12 +164,12 @@ def test_the_monthly_close_points_here_only_while_something_is_missing(monkeypat
     """
     from finctl.web.routen import auswertung as _aus
 
-    monkeypatch.setattr(_aus._einrichtung, "offen", lambda: 2)
+    monkeypatch.setattr(_aus._einrichtung, "offen", lambda: (2, 3))
     html = client.get("/monatsabschluss").text
     assert "Einrichtung ist noch nicht fertig" in html
     assert 'href="/einrichtung"' in html and "2 von 3" in html
 
-    monkeypatch.setattr(_aus._einrichtung, "offen", lambda: 0)
+    monkeypatch.setattr(_aus._einrichtung, "offen", lambda: (0, 3))
     assert "Einrichtung ist noch nicht fertig" not in \
         client.get("/monatsabschluss").text
 
@@ -284,3 +284,33 @@ def test_untouched_assumptions_are_pointed_out(monkeypatch):
 
     monkeypatch.setattr(ein, "_annahmen_angepasst", lambda: (1, 12))
     assert "mitgelieferten Schätzungen" not in client.get("/einrichtung").text
+
+
+def test_the_birth_date_is_only_asked_for_where_the_forecast_needs_it(monkeypatch):
+    """Wer nur die Basis hat, soll weder "offen" noch eine rote Frage nach dem Alter lesen.
+
+    Gemessen am 01.11.2026 bei einem leeren Ordner: "Wer plant" stand rot auf offen und zaehlte
+    im Hinweis der Startseite mit, obwohl Geburtsdatum und Rentenalter nur die Prognose braucht.
+    """
+    from finctl import module
+
+    monkeypatch.setattr(module, "aktive", lambda: {"konten", "einlesen", "regeln", "auswertung"})
+    person = next(s for s in ein.schritte() if s["id"] == "person")
+    assert person["noetig"] is False
+    assert ein.offen()[1] == 2  # Sicherung und Konten
+    stand = ein.schritte()
+    stand[3]["fertig"] = False
+    monkeypatch.setattr(ein, "schritte", lambda: stand)
+    assert "später" in client.get("/einrichtung").text
+    monkeypatch.undo()
+    monkeypatch.setattr(module, "aktive", lambda: {"konten", "einlesen", "regeln", "auswertung"})
+
+    monkeypatch.setattr(module, "aktive", lambda: {"konten", "einlesen", "regeln", "auswertung",
+                                                   "prognose"})
+    assert next(s for s in ein.schritte() if s["id"] == "person")["noetig"] is True
+    assert ein.offen()[1] == 3
+
+
+def test_the_default_data_folder_is_not_an_open_question():
+    """Der Ordner des Systems ist die Antwort; nur wer ihn verlegen will, tut etwas."""
+    assert next(s for s in ein.schritte() if s["id"] == "datenordner")["fertig"]

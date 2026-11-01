@@ -209,7 +209,9 @@ def test_create_assign_split_and_see_it_in_the_balance(datei):
     vorschau = client.post("/api/geteilt/teilung", json={
         "buchung": hash_, "teil": seq, "vorschau": True,
         "teilung": {"art": "gewicht", "ich": 1, "personen": {anna: 3}}}).json()
-    assert vorschau["anteile"][anna] == round(-cents * 3 / 4)
+    # Ein halber Cent geht nach dem groessten Rest an einen der beiden, nicht nach round().
+    assert abs(vorschau["anteile"][anna] + cents * 3 / 4) <= 0.5
+    assert sum(vorschau["anteile"].values()) == -cents
     assert "teilung" not in yaml.safe_load(datei.read_text(encoding="utf-8"))["buchungen"][0]
 
     client.post("/api/geteilt/teilung", json={

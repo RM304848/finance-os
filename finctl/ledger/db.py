@@ -256,8 +256,12 @@ def statement_chain_gaps(conn: sqlite3.Connection) -> list[dict]:
     Statement N's closing balance must equal N+1's opening balance. A break
     means a statement period is missing, which is the failure mode that would
     otherwise silently corrupt every downstream total.
+
+    Exports without a balance column (Sparkasse CSV) carry `0` and the sum of
+    their own bookings in its place: nothing to chain, and every pair would
+    show as a break. They are left out.
     """
-    rows = conn.execute(
+    rows = [r for r in conn.execute(
         """
         SELECT id, account_id, period_start, period_end, reconcile_basis,
                balance_start_cents, balance_end_cents, source_name
@@ -265,7 +269,7 @@ def statement_chain_gaps(conn: sqlite3.Connection) -> list[dict]:
         WHERE  status = 'imported'
         ORDER  BY account_id, period_start
         """
-    ).fetchall()
+    ).fetchall() if r["reconcile_basis"] != "ohne_saldo"]
 
     # Some issuers (Scalable) print value-dated balances, so interest and tax
     # value-dated to the previous month's last day but booked on the 1st sit
