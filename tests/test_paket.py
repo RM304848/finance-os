@@ -49,25 +49,24 @@ def rad(tmp_path_factory) -> list[str]:
         pytest.skip("`build` nicht installiert")
 
     ziel = tmp_path_factory.mktemp("rad")
-    # setuptools legt `build/` IM PROJEKT an, nicht im Zielordner. Bleibt es
-    # liegen, findet ruff dort eine zweite Kopie jeder Datei -- und die
-    # Verzweigungsratsche meldet jede Funktion als neu ueber der Schwelle.
-    # Ein Test, der die Arbeitskopie veraendert zuruecklaesst, ist ein Test,
-    # der den naechsten zum Luegner macht.
-    vorher = (WURZEL / "build").exists()
-    try:
-        fertig = subprocess.run(
-            [sys.executable, "-m", "build", "--wheel", "--outdir", str(ziel)],
-            cwd=WURZEL, capture_output=True, text=True, check=False)
-        assert fertig.returncode == 0, fertig.stderr[-2000:]
+    # Gebaut wird in einer Kopie, nicht im Projekt: setuptools legt `build/` und
+    # `finctl.egg-info` dort an, wo es baut. Im Projekt fand ruff danach eine
+    # zweite Kopie jeder Datei, und neben einer Installation mit `pip install -e`
+    # (GitHub Actions) stiess der Bau auf deren `egg-info` und brach ab.
+    quelle = tmp_path_factory.mktemp("quelle")
+    for name in ("pyproject.toml", "README.md", "LICENSE.md", "HANDBUCH.md"):
+        if (WURZEL / name).exists():
+            shutil.copy2(WURZEL / name, quelle / name)
+    shutil.copytree(WURZEL / "finctl", quelle / "finctl",
+                    ignore=shutil.ignore_patterns("__pycache__", "*.egg-info"))
+    fertig = subprocess.run(
+        [sys.executable, "-m", "build", "--wheel", "--outdir", str(ziel)],
+        cwd=quelle, capture_output=True, text=True, check=False)
+    assert fertig.returncode == 0, fertig.stderr[-2000:]
 
-        [datei] = sorted(ziel.glob("*.whl"))
-        with zipfile.ZipFile(datei) as z:
-            return z.namelist()
-    finally:
-        if not vorher:
-            shutil.rmtree(WURZEL / "build", ignore_errors=True)
-        shutil.rmtree(WURZEL / "finctl.egg-info", ignore_errors=True)
+    [datei] = sorted(ziel.glob("*.whl"))
+    with zipfile.ZipFile(datei) as z:
+        return z.namelist()
 
 
 def test_the_wheel_carries_every_file_the_app_reads_at_runtime(rad):
