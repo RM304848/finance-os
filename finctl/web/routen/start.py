@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from finctl.ledger import db as ledger
+from finctl.ledger import kontostand
 from finctl.web.basis import (
     TEMPLATES,
     basis_clause,
@@ -68,6 +70,12 @@ def _kacheln(c: sqlite3.Connection, jahr: str) -> dict:
                 ORDER BY period_end DESC LIMIT 1) AS as_of
         FROM   accounts a WHERE a.active = 1 AND a.ingest_mode = 'parsed'
         ORDER  BY a.id""")]
+    # Ohne Saldo im Export steht im Auszug nur die Summe der Datei: der Stand kommt
+    # aus dem eingetragenen Kontostand (ledger/kontostand.py), oder er ist unbekannt.
+    for k in konten:
+        if k["as_of"] and kontostand.ohne_saldo(c, k["id"]):
+            k["balance_cents"] = kontostand.saldo_zum(
+                c, k["id"], date.fromisoformat(k["as_of"]))
     return {
         "jahr": jahr, "einnahmen": einnahmen, "ausgaben": ausgaben,
         "gehalt": gehalt,

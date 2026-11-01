@@ -11,9 +11,12 @@ def _db():
     conn.row_factory = sqlite3.Row
     conn.executescript("""
         CREATE TABLE accounts (id TEXT, display_name TEXT, ingest_mode TEXT);
-        CREATE TABLE statements (account_id TEXT, period_end TEXT);
+        CREATE TABLE statements (account_id TEXT, period_end TEXT, status TEXT,
+                                 reconcile_basis TEXT);
+        CREATE TABLE balance_snapshots (account_id TEXT, as_of TEXT, balance_cents INTEGER);
         INSERT INTO accounts VALUES ('c24','C24','parsed'), ('dkb','DKB','parsed');
-        INSERT INTO statements VALUES ('c24','2026-08-31'), ('dkb','2026-09-04');
+        INSERT INTO statements VALUES ('c24','2026-08-31','imported','booking'),
+                                      ('dkb','2026-09-04','imported','booking');
     """)
     return conn
 

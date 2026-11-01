@@ -350,7 +350,8 @@ function zusammenfassung(e){
                     : '<span class="neg">geht nicht auf</span>');
   return '<p><strong>' + esc(e.bank) + '</strong>' + (e.konto ? ' · ' + esc(e.konto) : '')
     + ' · ' + e.umsaetze + ' Umsätze vom ' + e.von + ' bis ' + e.bis
-    + ' · Saldo ' + euroText(e.anfang_cents) + ' → ' + euroText(e.ende_cents) + ' · ' + pruefung + '</p>';
+    + (e.ohne_saldo ? '' : ' · Saldo ' + euroText(e.anfang_cents) + ' → ' + euroText(e.ende_cents))
+    + ' · ' + pruefung + '</p>';
 }
 function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 

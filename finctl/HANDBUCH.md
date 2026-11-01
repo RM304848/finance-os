@@ -759,8 +759,10 @@ ein Auszug gelesen wird und wo er liegt.
   **Sparkasse:** im Online-Banking unter *Umsätze → Exportieren* das Format **CSV-CAMT V2**
   oder **CSV-CAMT V8** wählen (gleiche Spalten), ersatzweise **CSV-MT940**; je Konto eine
   Datei, den Zeitraum bis zum Monatsletzten (oder bis heute). Das PDF der Umsatzliste und
-  „CSV mit Kategorien“ liest die App nicht. Die Sparkasse-CSV trägt keinen Saldo: die App
-  sagt das beim Einlesen, und ein Kontostand lässt sich daraus nicht prüfen. Vorgemerkte
+  „CSV mit Kategorien“ liest die App nicht. Die Sparkasse-CSV trägt keinen Saldo: den Kontostand trägst du im
+  Monatsabschluss unter *Konten* einmal ein („Kontostand laut Online-Banking“, mit Datum);
+  von dort rechnet die App mit den Umsätzen vor und zurück. Bis dahin steht dort „Kontostand
+  fehlt: einmal eintragen“ und die Zeile bleibt offen. Vorgemerkte
   Umsätze fehlen, bis sie gebucht sind; der nächste Export bringt sie.
 - **Spalten zuordnen:** kennt die App einen CSV-Export nicht, schlägt sie vor, welche
   Spalte Datum, Betrag, Gegenpartei und Saldo ist. Nach der Vorschau wird daraus ein

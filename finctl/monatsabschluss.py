@@ -29,6 +29,7 @@ from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
 from finctl.dateien import yaml_lesen
+from finctl.ledger import kontostand as _ks
 from finctl.pfade import CONFIG_DIR
 
 if TYPE_CHECKING:
@@ -132,6 +133,10 @@ def konten(conn: sqlite3.Connection, heute: date, periode: str,
             # Auszug reicht, ist genau das, was man zum Nachholen wissen muss.
             p.hinweis = (f"Auszug bis {bis.isoformat()} · {vor:%Y-%m} fehlt" if bis
                          else "noch kein Auszug eingelesen")
+        if _ks.braucht_anker(conn, row["id"]):
+            # Ohne Saldo im Export steht der Kontostand in keinem Auszug: einmal abschreiben.
+            p.erledigt, p.beleg = False, ""
+            p.hinweis = "Kontostand fehlt: einmal eintragen"
         b = live.get(row["id"])
         if b and b.get("as_of"):
             a = b["as_of"]

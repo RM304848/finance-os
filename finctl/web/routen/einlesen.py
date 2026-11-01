@@ -51,6 +51,8 @@ def _zusammenfassung(parser, ergebnis) -> dict:
             "umsaetze": len(ergebnis.transactions),
             "anfang_cents": kopf.balance_start_cents, "ende_cents": kopf.balance_end_cents,
             "abgestimmt": reconcile(ergebnis).ok, "warnungen": ergebnis.warnings,
+            # Der Export traegt keinen Saldo: Anfang und Ende sind keine Zahlen der Bank.
+            "ohne_saldo": ergebnis.reconcile_basis == "ohne_saldo",
             "beispiele": [{"datum": t.booking_date, "cents": t.amount_cents,
                            "text": (t.counterparty or t.raw_text or "")[:60]}
                           for t in ergebnis.transactions[-5:]]}

@@ -19,6 +19,7 @@ from pathlib import Path
 import typer
 import yaml
 
+from finctl import bestaende as _bestaende
 from finctl import konten as _konten
 from finctl import nachfuehren as _nachfuehren
 from finctl import ops as _ops
@@ -112,42 +113,7 @@ def _init_bericht(p: dict) -> None:
 
 
 
-def _bestaende_spiegeln(conn, spec: dict) -> None:
-    """Die getippten Staende aus `balances.yaml` als Schnappschuesse in die Datenbank.
-
-    Jede Position mit Betrag steht unter ihrem eigenen Datum, sonst unter dem der Datei. So
-    findet die Prognose fuer ein Konto ohne Auszug den juengsten Stand bis zu ihrem Stichtag
-    (`konten.account_forecast`, `bestaende.auszugsstaende`), auch einen, den die Seite spaeter
-    eintrug. Die Datei gehoert diesen Zeilen ganz: Was als `manual` in der Datenbank steht,
-    wird zuerst geloescht, damit ein Eintrag, der aus der Datei verschwand, nicht liegenbleibt.
-    """
-    as_of = str(spec.get("as_of") or "")[:10]
-    known = {r["id"] for r in conn.execute("SELECT id FROM accounts")}
-    conn.execute("DELETE FROM balance_snapshots WHERE source = 'manual'")
-    for bal in spec.get("balances") or []:
-        acct = bal.get("account_id") if isinstance(bal, dict) else None
-        if not acct or acct not in known:
-            continue
-        tag = str(bal.get("as_of") or as_of)[:10]
-        if not tag:
-            continue
-        # Ein bewusst offener Wert ist keine Null und kein Fehler.
-        # balances.yaml fuehrt einen Bestand mit `cents: null` und der
-        # Begruendung "OFFEN: Wert zum Verkaufszeitpunkt" -- und daran
-        # brach `finctl init` mit einem TypeError ab, mitten im Lauf,
-        # nachdem Konten und Objekte schon geschrieben waren. Ein
-        # dokumentiertes Unbekanntes darf den Import nicht anhalten.
-        if bal.get("cents") is None:
-            continue
-        conn.execute(
-            """
-            INSERT INTO balance_snapshots (account_id, as_of, balance_cents, source)
-            VALUES (?,?,?,'manual')
-            ON CONFLICT(account_id, as_of) DO UPDATE SET
-                balance_cents = excluded.balance_cents
-            """,
-            (acct, tag, int(bal["cents"])),
-        )
+_bestaende_spiegeln = _bestaende.spiegeln
 
 
 @app.command()
@@ -724,7 +690,7 @@ def status(
                    ON last.account_id = b.account_id
             JOIN   statements s ON s.account_id = b.account_id
                    AND s.period_end = last.period_end AND s.status='imported'
-            WHERE  b.as_of > s.period_end
+            WHERE  b.as_of > s.period_end AND s.reconcile_basis <> 'ohne_saldo'
             """
         ).fetchall()]
         queue = conn.execute("SELECT COUNT(*) FROM v_review_queue").fetchone()[0]

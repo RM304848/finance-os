@@ -977,11 +977,14 @@ def test_account_forecast_starts_after_the_last_complete_month(tmp_path):
     db.row_factory = sqlite3.Row
     db.executescript("""
         CREATE TABLE statements (account_id TEXT, period_start TEXT, period_end TEXT,
-                                 balance_end_cents INTEGER, status TEXT);
+                                 balance_end_cents INTEGER, status TEXT,
+                                 reconcile_basis TEXT);
         CREATE TABLE transactions (account_id TEXT, booking_date TEXT, amount_cents INTEGER);
         CREATE TABLE balance_snapshots (account_id TEXT, as_of TEXT, balance_cents INTEGER);
-        INSERT INTO statements VALUES ('giro', '2026-08-04', '2026-09-04', 50000, 'imported');
-        INSERT INTO statements VALUES ('spar', '2026-08-01', '2026-08-31', 7000, 'imported');
+        INSERT INTO statements VALUES ('giro', '2026-08-04', '2026-09-04', 50000, 'imported',
+                                       'booking');
+        INSERT INTO statements VALUES ('spar', '2026-08-01', '2026-08-31', 7000, 'imported',
+                                       'booking');
         INSERT INTO transactions VALUES ('giro', '2026-08-31', -1000);
         INSERT INTO transactions VALUES ('giro', '2026-09-01', -30000);
         INSERT INTO transactions VALUES ('giro', '2026-09-04', 5000);

@@ -6,6 +6,27 @@ macht daraus beim Veröffentlichen die neue Version.
 
 ## Unveröffentlicht
 
+## 0.5.0 – 2026-11-01
+
+**Auf einen Blick:** Diese Version ist die erste, die jemand ohne Vorkenntnisse unter Windows
+einrichten kann.
+- **Sparkasse:** Exporte aus dem Online-Banking werden gelesen (CSV-CAMT V8/V2, CSV-MT940). Den
+  Kontostand, den der Export nicht mitliefert, trägst du einmal im Monatsabschluss ein.
+- **Erster Start:** Die Einrichtung führt durch Sicherung, Konten und, falls die Prognose an ist,
+  das Geburtsdatum. Seiten ohne Daten sagen, was zu tun ist, statt rot zu warnen.
+- **Windows:** Pfade, Ordnernamen und Hinweise stimmen unter Windows. Die ganze Testsuite läuft
+  dort mit.
+- **Konten und Hochrechnung** rechnen aus denselben Eingaben: aus den letzten zwölf Monaten,
+  Verträgen, Objekten, erwarteten Einnahmen und den Zinssätzen der Konten.
+- **Begründungen** stehen als Notizen am Eintrag.
+
+Die Einzelheiten:
+
+- **Sparkasse: Kontostand aus einem eingetragenen Stand:** Die Sparkasse-CSV trägt keinen Saldo; bisher
+  zeigte die App als Kontostand die Summe der letzten Datei. Jetzt trägst du im **Monatsabschluss**
+  unter **Konten** einmal den „Kontostand laut Online-Banking“ ein, und alle Seiten rechnen von dort mit
+  den Umsätzen vor und zurück. Bis dahin steht dort „Kontostand fehlt: einmal eintragen“. Das gilt auch
+  für Commerzbank und N26.
 - **Der erste Start läuft durch:** Das erste **Update** eines neuen Datenordners brach mit einem
   Datenbankfehler ab, sobald die mitgelieferten allgemeinen Regeln an waren (die Voreinstellung);
   das ist behoben. Wer nur die Basis eingeschaltet hat, liest auf dem **Monatsabschluss** keine

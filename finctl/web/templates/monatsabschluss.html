@@ -141,7 +141,7 @@
     <th>{{ 'Beleg' if konten else 'Stand' }}</th><th>Notiz</th><th></th></tr>
   {% for z in g.zeilen %}{% set p = z.p %}
   {# Renten werden auf /renten gepflegt; hier steht nur, ob das Schreiben aktuell ist. #}
-  {% set feld = bearbeiten and not z.auszug and g.id != 'renten' %}
+  {% set feld = (bearbeiten and not z.auszug or z.ohne_saldo) and g.id != 'renten' %}
   {# Eine Rente kann wie ihre Police heissen: eigener Praefix fuer die id. #}
   <tr id="pos-{{ 'rente-' if g.id == 'renten' }}{{ z.key|e }}" data-key="{{ z.key|e }}"{% if z.api %} data-api="{{ z.api }}"{% endif %}
       data-cents="{{ z.cents if z.cents is not none }}">
@@ -149,19 +149,21 @@
       {%- else %}<span class="neg" title="Veraltet. {{ g.erklaerung }}">○</span>{% endif %}</td>
     {# Konten als Kennung (konten-als-kennung), der Anzeigename als Titel. #}
     <td>{% if konten %}<span title="{{ p.name }}">{{ z.key }}</span>{% else %}{{ p.name }}{% endif %}
+      {%- if z.ohne_saldo and z.anker_cents is none %}<br><span class="muted fein">Kontostand fehlt: einmal eintragen</span>{% endif %}
       {%- if g.id == 'renten' %}<br><span class="muted fein">{{ p.zusatz }}</span>
       {%- if z.ab %}<br><span class="muted fein">Bezug ab {{ z.ab }}</span>{% endif %}
       {%- if z.kosten_hoch %} <span class="neg" title="Effektivkosten über deiner Schwelle">⚠</span>{% endif %}{% endif %}</td>
     {% if feld %}
-    <td class="num"><input class="betrag" data-feld="wert" value="{{ z.cents|betrag }}"
-        placeholder="unbekannt" oninput="standGeaendert(this)"
-        onkeydown="standTaste(event)"></td>
+    <td class="num"><input class="betrag" data-feld="wert" value="{{ (z.anker_cents if z.ohne_saldo else z.cents)|betrag }}"
+        placeholder="{{ 'Kontostand laut Online-Banking' if z.ohne_saldo else 'unbekannt' }}"
+        {%- if z.ohne_saldo %} title="Kontostand laut Online-Banking an dem Tag rechts. Von dort rechnet die App mit den Umsätzen vor und zurück."{% endif %}
+        oninput="standGeaendert(this)" onkeydown="standTaste(event)"></td>
     {%- if mit_gewinn %}
     <td class="num gewinn">{% if z.depot %}<input class="betrag" data-feld="gewinn"
         value="{{ z.gewinn|betrag if z.gewinn is not none else '' }}" placeholder="Gewinn?"
         aria-label="davon Gewinn" oninput="standGeaendert(this)" onkeydown="standTaste(event)">{% endif %}</td>
     {%- endif %}
-    <td class="stand"><input data-feld="stand" value="{{ z.as_of }}" placeholder="2026-01-01"
+    <td class="stand"><input data-feld="stand" value="{{ z.anker_as_of if z.ohne_saldo else z.as_of }}" placeholder="2026-01-01"
         class="{{ 'alt' if not p.erledigt }}" oninput="standGeaendert(this)"
         onkeydown="standTaste(event)"></td>
     {% else %}
@@ -177,7 +179,7 @@
         oninput="standGeaendert(this)" onkeydown="standTaste(event)">{{ z.note }}</textarea>
       {%- else %}<span class="muted">{{ z.note }}</span>{% endif %}</td>
     <td class="tun">{% if g.id == 'renten' %}{% if seite_an("/renten") %}<a class="plain" href="/renten#rente-{{ z.key|e }}">pflegen →</a>{% endif %}
-      {%- elif bearbeiten %}
+      {%- elif bearbeiten or z.ohne_saldo %}
       <button class="ghost" data-knopf onclick="standAblegen(this)"
         {%- if z.auszug or p.erledigt or z.cents is none %} hidden{% endif %}
         title="Denselben Wert mit heutigem Datum ablegen">unverändert</button>

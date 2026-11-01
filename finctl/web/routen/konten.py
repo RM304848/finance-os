@@ -11,6 +11,7 @@ from finctl import konten as _kn
 from finctl import notizen as _notizen
 from finctl.bestaende import NOTIZ_ALT, RUECKKAUF_FELDER
 from finctl.dateien import yaml_schreiben
+from finctl.ledger import kontostand as _ks
 from finctl.web import diagramm as _dg
 from finctl.web.basis import (
     CONFIG_DIR,
@@ -551,14 +552,19 @@ async def api_bestand(request: Request):
 
     spec = _best.lesen(CONFIG_DIR / _best.DATEI)
     eintrag = _best.position(spec, key)
-    if eintrag is None:
-        return JSONResponse({"error": f"unbekannte Position {key}"}, status_code=404)
     c = conn()
     try:
         geparst = _best.geparste_konten(c)
+        # Ein Konto, dessen Export keinen Saldo traegt, hat keinen Auszugsstand: Hier steht der
+        # Kontostand laut Online-Banking, von dem aus die App vor- und zurueckrechnet.
+        ohne_saldo = _ks.ohne_saldo(c, key)
+        if eintrag is None and ohne_saldo:
+            eintrag = _best.anker_eintrag(c, spec, key)
+        if eintrag is None:
+            return JSONResponse({"error": f"unbekannte Position {key}"}, status_code=404)
         # Gesperrt ist der WERT, nicht die Notiz: was ein Konto wert ist, sagt der
         # Auszug; was von dem Geld jemand anderem gehoert, sagt nur der Besitzer.
-        if key in geparst and ("cents" in body or body.get("as_of")):
+        if key in geparst and not ohne_saldo and ("cents" in body or body.get("as_of")):
             return JSONResponse({"error": f"Wert und Stichtag von {key} kommen aus dem "
                                           "Kontoauszug"}, status_code=400)
         vorher = _best.zusammenfuehren(c, spec)
@@ -576,6 +582,14 @@ async def api_bestand(request: Request):
 
     _best.verlauf_fortschreiben(spec, vorher, nachher, key, _dtm.date.today())
     yaml_schreiben(CONFIG_DIR / _best.DATEI, spec)
+    if ohne_saldo:
+        # Der Anker gilt sofort, nicht erst beim naechsten `finctl init`.
+        c = conn()
+        try:
+            _best.spiegeln(c, spec)
+            c.commit()
+        finally:
+            c.close()
     return {"ok": True, "count": len(spec.get("balances") or [])}
 
 

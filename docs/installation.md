@@ -5,7 +5,7 @@ Rechner; deine Daten gehen nirgendwohin.
 
 ## Herunterladen
 
-Unter **Releases** die neueste Version öffnen und die passende Datei laden:
+Die Datei bekommst du von der Person, die dir die App gibt:
 
 - **Mac:** `FinanceOS-<version>-mac.dmg`
 - **Windows:** `FinanceOS-<version>-windows.exe`
@@ -27,6 +27,11 @@ Unter **Releases** die neueste Version öffnen und die passende Datei laden:
    **Weitere Informationen** und dann **Trotzdem ausführen** klicken.
 3. Ein schwarzes Fenster öffnet sich und bleibt offen: das ist die App.
    Schließt du es, ist sie beendet.
+
+Adminrechte braucht die App nicht. Sie schreibt nur in deinen Benutzerordner
+und ist nur auf deinem eigenen Rechner erreichbar (`127.0.0.1`), deshalb fragt
+auch die Firewall nicht. Sperrt ein Firmenrechner unbekannte Programme ganz, ist
+das eine Regel der IT. Dann lässt sie sich dort nicht starten.
 
 ## Benutzen
 
@@ -50,6 +55,20 @@ ersten Start entscheiden.
 Sichern geht über den Knopf **Sichern** im Monatsabschluss; das Ziel legst du
 in der Einrichtung fest.
 
+## Umsätze der Sparkasse einlesen
+
+Im Online-Banking der Sparkasse unter **Umsätze → Exportieren** das Format
+**CSV-CAMT V8** wählen (oder **CSV-CAMT V2**, ersatzweise **CSV-MT940**). Wähle
+eine Datei je Konto und als Zeitraum bis zum Monatsletzten oder bis heute.
+Die Datei legst du in der App unter **Einlesen** ab. Vorgemerkte Umsätze
+überspringt die App, und eine Datei, die sich mit einer früheren überschneidet,
+erzeugt keine doppelten Buchungen.
+
+Der Export der Sparkasse enthält keinen Kontostand. Trag deshalb einmal den
+Kontostand aus dem Online-Banking mit Datum ein: im **Monatsabschluss** unter
+Konten, Feld „Kontostand laut Online-Banking“.
+Ab da rechnet die App ihn mit jeder Buchung weiter.
+
 ## Neuer Rechner oder etwas ist schiefgegangen
 
 App installieren und öffnen, dann in der Einrichtung **Aus einer Sicherung
@@ -63,7 +82,7 @@ sie nicht.
 
 Die neue Datei herunterladen und die alte ersetzen – auf dem Mac in
 **Programme** überschreiben, unter Windows die alte `.exe` löschen. Deine
-Daten bleiben, wo sie sind. Was sich geändert hat, steht unter Releases.
+Daten bleiben, wo sie sind. Was sich geändert hat, steht in den Notizen zur Version.
 
 ## Was die App ist und was nicht
 
@@ -73,10 +92,10 @@ Rechenhilfen ohne Gewähr und ersetzen keine Steuer- oder Anlageberatung.
 Benutzen darfst du sie privat und für andere nicht-kommerzielle Zwecke
 (Lizenz: PolyForm Strict 1.0.0). Weitergeben, verändern oder kommerziell
 nutzen nur mit Zustimmung. Die Lizenzen der mitgelieferten Bibliotheken
-stehen in `DRITTLIZENZEN.txt` neben der App (Mac: in der `.dmg`) und unter
-Releases.
+stehen in `DRITTLIZENZEN.txt` neben der App (Mac: in der `.dmg`).
 
 ## Etwas geht nicht
 
-Unter **Issues → New issue → Rückmeldung** beschreiben, was passiert ist.
-Bitte ohne echte Beträge, Namen oder Auszüge.
+Sag der Person Bescheid, von der du die App hast, und beschreib, was passiert
+ist. Ein Bildschirmfoto der Meldung hilft. Bitte keine Auszüge und keine
+Sicherung mitschicken, beides enthält deine Umsätze.

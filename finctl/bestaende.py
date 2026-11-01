@@ -37,6 +37,7 @@ from pathlib import Path
 
 from finctl import notizen as _notizen
 from finctl.dateien import yaml_lesen
+from finctl.ledger import kontostand as _ks
 from finctl.pfade import CONFIG_DIR
 
 #: Wie die Notiz einer Position bisher hiess; `notiz` gilt vor ihm (`finctl/notizen.py`).
@@ -171,6 +172,65 @@ def policenwert_festhalten(vorher: dict, eintrag: dict) -> None:
         eintrag["rueckkauf_policenwert_cents"] = int(vorher["cents"])
 
 
+def spiegeln(conn: sqlite3.Connection, spec: dict) -> None:
+    """Die getippten Staende aus `balances.yaml` als Schnappschuesse in die Datenbank.
+
+    Jede Position mit Betrag steht unter ihrem eigenen Datum, sonst unter dem der Datei. So
+    findet die Prognose fuer ein Konto ohne Auszug den juengsten Stand bis zu ihrem Stichtag
+    (`konten.account_forecast`, `bestaende.auszugsstaende`), auch einen, den die Seite spaeter
+    eintrug. Die Datei gehoert diesen Zeilen ganz: Was als `manual` in der Datenbank steht,
+    wird zuerst geloescht, damit ein Eintrag, der aus der Datei verschwand, nicht liegenbleibt.
+    """
+    as_of = str(spec.get("as_of") or "")[:10]
+    known = {r["id"] for r in conn.execute("SELECT id FROM accounts")}
+    conn.execute("DELETE FROM balance_snapshots WHERE source = 'manual'")
+    for bal in spec.get("balances") or []:
+        acct = bal.get("account_id") if isinstance(bal, dict) else None
+        if not acct or acct not in known:
+            continue
+        tag = str(bal.get("as_of") or as_of)[:10]
+        if not tag:
+            continue
+        # Ein bewusst offener Wert ist keine Null und kein Fehler.
+        # balances.yaml fuehrt einen Bestand mit `cents: null` und der
+        # Begruendung "OFFEN: Wert zum Verkaufszeitpunkt" -- und daran
+        # brach `finctl init` mit einem TypeError ab, mitten im Lauf,
+        # nachdem Konten und Objekte schon geschrieben waren. Ein
+        # dokumentiertes Unbekanntes darf den Import nicht anhalten.
+        if bal.get("cents") is None:
+            continue
+        conn.execute(
+            """
+            INSERT INTO balance_snapshots (account_id, as_of, balance_cents, source)
+            VALUES (?,?,?,'manual')
+            ON CONFLICT(account_id, as_of) DO UPDATE SET
+                balance_cents = excluded.balance_cents
+            """,
+            (acct, tag, int(bal["cents"])),
+        )
+
+
+def anker_eintrag(conn: sqlite3.Connection, spec: dict, konto: str) -> dict | None:
+    """Der Eintrag in `balances.yaml` fuer den Kontostand eines Kontos ohne Saldo im Export.
+
+    Gibt es ihn noch nicht, wird er angelegt (und gehoert damit zu `spec`). None, wenn
+    es das Konto nicht gibt.
+    """
+    eintrag = position(spec, konto)
+    if eintrag is not None:
+        return eintrag
+    k = conn.execute("SELECT display_name, account_type FROM accounts WHERE id = ?",
+                     (konto,)).fetchone()
+    if k is None:
+        return None
+    eintrag = {"account_id": konto, "name": k["display_name"] or konto,
+               "kind": k["account_type"] or "giro"}
+    liste = spec.get("balances") or []
+    liste.append(eintrag)
+    spec["balances"] = liste
+    return eintrag
+
+
 def geparste_konten(conn: sqlite3.Connection) -> set[str]:
     return {r[0] for r in conn.execute(
         "SELECT id FROM accounts WHERE ingest_mode = 'parsed'")}
@@ -187,7 +247,9 @@ def auszugsstaende(conn: sqlite3.Connection, konten: list[str]) -> dict[str, dic
     Ein Konto, das Auszuege liest, aber noch keinen hat, nimmt den juengsten getippten
     Stand bis zum Stichtag (`balance_snapshots`, von `finctl init` aus `balances.yaml`
     gespiegelt) -- denselben, den das Monatsmodell nimmt (`konten.account_forecast`). Ein
-    Stand nach dem Stichtag zaehlt nicht. Ohne beides bleibt der Betrag leer.
+    Stand nach dem Stichtag zaehlt nicht. Ohne beides bleibt der Betrag leer. Traegt der Export
+    eines Kontos keinen Saldo (`ledger/kontostand.py`), rechnet der Betrag von einem
+    eingetragenen Stand aus und ist leer, solange keiner da ist.
     """
     from finctl.forecast import stichtag as _st
 
@@ -200,6 +262,12 @@ def auszugsstaende(conn: sqlite3.Connection, konten: list[str]) -> dict[str, dic
         if bis:
             out[konto] = {"cents": _st.saldo_zum(conn, konto, stichtag),
                           "as_of": stichtag.isoformat(), "auszug_bis": bis}
+            if _ks.ohne_saldo(conn, konto):
+                # Der Export traegt keinen Saldo: der Stand kommt von dem, den der Nutzer
+                # eingetragen hat, und der steht hier zum Aendern bereit.
+                a = _ks.anker(conn, konto, stichtag)
+                out[konto].update(ohne_saldo=True, anker_cents=a[1] if a else None,
+                                  anker_as_of=a[0].isoformat() if a else "")
             continue
         stand = conn.execute(
             "SELECT balance_cents, as_of FROM balance_snapshots WHERE account_id = ? "

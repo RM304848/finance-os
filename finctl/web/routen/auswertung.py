@@ -675,6 +675,11 @@ def _staende(posten: list, bestand: dict | None, auszug: dict, jahr: str,
                 "cents": beleg["cents"] if beleg else p.cents,
                 "as_of": str(p.stand or "") if not beleg else "",
                 "auszug": beleg is not None,
+                # Ohne Saldo im Export: der Stand laut Online-Banking, von dem aus die App
+                # rechnet, steht zum Eintragen da (statt des errechneten Saldos).
+                "ohne_saldo": bool(beleg and beleg.get("ohne_saldo")),
+                "anker_cents": beleg.get("anker_cents") if beleg else None,
+                "anker_as_of": beleg.get("anker_as_of", "") if beleg else "",
                 # Nur was in balances.yaml steht, hat eine Notiz: nur das
                 # zaehlt zum Vermoegen.
                 "notiz": key in zu, "note": b.get("note", ""),

@@ -32,7 +32,14 @@ def saldo_zum(conn, account: str, stichtag: date) -> int | None:
 
     Reicht der letzte Auszug ueber den Stichtag hinaus, werden die Buchungen
     danach vom Endsaldo abgezogen. None, wenn es keinen Auszug gibt.
+
+    Ein Konto, dessen Export keinen Saldo traegt, rechnet von dem Stand, den der Nutzer
+    eingetragen hat (`ledger.kontostand`); ohne den ist der Saldo unbekannt.
     """
+    from finctl.ledger import kontostand
+
+    if kontostand.ohne_saldo(conn, account):
+        return kontostand.saldo_zum(conn, account, stichtag)
     stmt = conn.execute(
         "SELECT period_end, balance_end_cents FROM statements "
         "WHERE account_id=? AND status='imported' AND period_end >= ? "
