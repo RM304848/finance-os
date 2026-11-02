@@ -8,7 +8,7 @@
 <details class="klapp" id="klammer-{{ k.id }}"{% if k.active and k.lines %} open{% endif %}>
   <summary>
     {{ k.name }}
-    <span class="zahl">— {% if k.obligation %}Verpflichtung{% else %}Plan · {{ 'an' if k.active else 'aus' }}{% endif %}
+    <span class="zahl">— {% if k.obligation %}Verpflichtung{% else %}Klammer · {{ 'an' if k.active else 'aus' }}{% endif %}
       {%- if k.summiert %} · wirkt noch <span class="{{ ns.rest|vz }}">{{ ns.rest|euro }}</span>/Monat
       {%- else %}{% for z in k.lines %} · {% if z.anteil is not none and z.start %}{{ (z.anteil * 100)|round|int }} % Gehalt ab {{ z.start.strftime('%Y-%m') }}
         {%- else %}Beginn fehlt{% endif %}{% endfor %}{% endif %}
@@ -28,12 +28,12 @@
     <span id="meldung-{{ k.id }}" class="muted"></span>
     {% if not k.obligation and k.id != 'teilzeit' %}
     <span style="flex:1"></span>
-    <button class="ghost" onclick="entfernen('{{ k.id }}', '{{ k.name|e }}')">Plan löschen</button>
+    <button class="ghost" onclick="entfernen('{{ k.id }}', '{{ k.name|e }}')">Klammer löschen</button>
     {% endif %}
   </div>
 
   <div class="wrap"><table class="planzeilen">
-    <tr><th>Position</th><th style="width:150px">Art</th><th>zählt</th>
+    <tr><th>Planzeile</th><th style="width:150px">Art</th><th>zählt</th>
         <th class="num" style="width:130px">geplant</th>
         <th class="num" style="width:110px">wirkt noch</th><th></th></tr>
     {% for z in k.lines %}
@@ -70,6 +70,7 @@
           {%- if z.nur_kontoprognose and not gerechnet.get(zid) %} · nur Kontoprognose{% endif %}
         {%- elif z.kind == 'wegfall' %}nichts zugeordnet — zieht nichts ab
         {%- else %}nichts zugeordnet — zählt voll{% endif %}
+        {%- if m and m.doppelt %} · <span class="neg">{{ m.doppelt|length }} passende {{ 'Buchung' if m.doppelt|length == 1 else 'Buchungen' }} nicht zugeordnet — zählt doppelt</span>{% endif %}
         {%- if gerechnet.get(zid) %} · {{ gerechnet[zid] }}{% endif %}</td>
       {% set geplant = 0 if z.kind == 'wegfall' else (z.amount_cents if z.kind == 'verkauf'
            or z.frequency == 'einmalig' else z.monthly_equivalent_cents()) %}
@@ -137,7 +138,7 @@
             {% for a in accounts %}<option value="{{ a }}"
               {% if a == z.account_id %}selected{% endif %}>{{ a }}</option>{% endfor %}
           </select></label>
-          <label>Frequenz<select id="e-freq-{{ zid }}" data-no-combo
+          <label>Takt<select id="e-freq-{{ zid }}" data-no-combo
               {% if z.kind == 'wegfall' %}disabled{% endif %}>
             {% for f in frequencies %}<option value="{{ f }}"
               {% if f == z.frequency %}selected{% endif %}>{{ f }}</option>{% endfor %}
@@ -190,6 +191,13 @@
             <tr><td class="muted" colspan="6">Noch nichts zugeordnet.</td></tr>
             {% endif %}
           </table>
+          {# Dieselbe Zeile wie die Vorschlaege, mit demselben „zuordnen“. #}
+          {% if m.doppelt %}
+          <p class="vorschlag-kopf neg">Zählt doppelt: gemessen und geplant</p>
+          <table class="detail" id="bd-{{ zid }}">
+            {% for b in m.doppelt %}{% include "_planung_buchungszeile.html" %}{% endfor %}
+          </table>
+          {% endif %}
           {# Eine Liste, ein Filter. Vorbelegt mit der Kategorie der Zeile und dem
              Messfenster; Text und Kategorie lassen sich frei aendern, Ein- und
              Ausgaenge kommen beide. #}
@@ -206,28 +214,22 @@
             {%- else %}Keine weiteren Buchungen dieser Kategorie{% endif %}
             <button class="ghost" onclick="buchungenAlle('{{ zid }}')"{% if not m.kandidaten %} hidden{% endif %}
               id="balle-{{ zid }}">alle zuordnen</button></p>
-          <table class="detail" id="bt-{{ zid }}">
-            {% for b in m.kandidaten %}
-            <tr><td class="muted">{{ b.booking_date }}</td><td class="muted">{{ b.account_id }}</td>
-              <td>{{ b.text }}</td><td class="num {{ b.amount_cents|vz }}">{{ b.amount_cents|euro }}</td>
-              <td class="muted">{{ kategorie_namen.get(b.kategorie, b.kategorie or '') }}</td>
-              <td class="aktionen"><button class="ghost" onclick="buchungZu('{{ zid }}', '{{ b.dedup_hash }}')">zuordnen</button></td></tr>
-            {% endfor %}
-          </table>
+          {# Dieselbe Vorlage liefert die Suche als Stück ihrer Antwort. #}
+          {% with kandidaten=m.kandidaten, meldung=none %}{% include "_planung_vorschlaege.html" %}{% endwith %}
         </div>
         {% endif %}
         {% endif %}
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">Noch keine Position.</td></tr>
+    <tr><td colspan="6" class="muted">Noch keine Planzeile.</td></tr>
     {% endfor %}
     {# Eine neue Position entsteht IN ihrer Klammer, als letzte Zeile -- nicht in
        einem Formular oben auf der Seite, in das man den Klammernamen tippen
        musste. Derselbe Aufklappbereich wie beim Bearbeiten. #}
     {% set nid = k.id ~ "-neu" %}
     <tr class="klappbar" onclick="oeffneZeile('{{ nid }}')">
-      <td colspan="5" class="muted">+ Position hinzufügen</td>
+      <td colspan="5" class="muted">+ Planzeile hinzufügen</td>
       <td class="aktionen"><button class="ghost"
         onclick="event.stopPropagation();oeffneZeile('{{ nid }}')">Hinzufügen</button></td>
     </tr>
@@ -255,7 +257,7 @@
             <option value="">{{ betriebskonto ~ " (Betriebskonto)" if betriebskonto else "Betriebskonto" }}</option>
             {% for a in accounts %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
           </select></label>
-          <label>Frequenz<select id="e-freq-{{ nid }}" data-no-combo>
+          <label>Takt<select id="e-freq-{{ nid }}" data-no-combo>
             {% for f in frequencies %}<option value="{{ f }}"{% if f == 'monatlich' %} selected{% endif %}>{{ f }}</option>{% endfor %}
           </select></label>
           <label>Richtung<select id="e-richtung-{{ nid }}" data-no-combo>

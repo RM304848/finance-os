@@ -1,13 +1,13 @@
 {% extends "base.html" %}{% block n_tx %}on{% endblock %}
-{% block title %}Transaktionen{% endblock %}
+{% block title %}Buchungen{% endblock %}
 {% block body %}
 {% include "_combo.html" %}
 {% import "_summe.html" as sm %}
 {% import "_reiter.html" as rt %}
-<h1>Transaktionen {{ sm.kopf(summe, gezeigt) }}</h1>
+<h1>Buchungen {{ sm.kopf(summe, gezeigt) }}</h1>
 {{ rt.reiter(reiter, f.ansicht) }}
 {% if f.ansicht == 'aufteilen' and rows %}
-<div class="note">Eine Regel hat diese Buchungen bewusst offen gelassen, weil eine Zahlung
+<div class="note">Eine Regel hat diese Buchungen bewusst offen gelassen, weil eine Buchung
   mehreres abdeckt. „aufteilen“ zerlegt sie in ihre Teile.</div>
 {% endif %}
 
@@ -324,7 +324,7 @@ function markiereHerkunft(id, antwort){
 {% import "_konfig.html" as kf %}
 {{ kf.fuss([
   ('config/rules.yaml', 'Die Regeln, die Buchungen zuordnen.'),
-  ('config/overrides.yaml', 'Jede Entscheidung von Hand — Kategorie, Objekt, Split.'),
+  ('config/overrides.yaml', 'Jede Handentscheidung — Kategorie, Objekt, Teile.'),
   ('config/taxonomy.yaml', 'Der Kategorienbaum und das fixkosten-Flag.'),
   ('config/properties.yaml', 'Die Objekte in der Objekt-Spalte.'),
   ('finctl/web/templates/transactions.html', 'Die Texte dieser Seite.'),

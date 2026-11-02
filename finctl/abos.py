@@ -137,7 +137,7 @@ def normalisieren(roh: dict) -> dict:
         "gekuendigt_zum": (_datum(roh["gekuendigt_zum"])
                            if roh.get("gekuendigt_zum") else None),
         "weg": roh.get("weg") or "",
-        "warum": _notizen.lesen(roh).text,
+        "notiz": _notizen.lesen(roh).text,
         "buchungen": [str(h) for h in roh.get("buchungen") or [] if h],
         "ignoriert": [str(h) for h in roh.get("ignoriert") or [] if h],
         "geteilt": {
@@ -299,8 +299,8 @@ def speichern(abo: dict, pfad: Path | None = None, art: str = "abo") -> dict:
     alt_notiz = _notizen.lesen(bisher) if bisher else _notizen.Notiz()
     # Die Notiz vergleicht die Datumsregel; hier zaehlen die Felder des Vertrags.
     gleich = bisher is not None and (
-        {k: v for k, v in normalisieren(bisher).items() if k != "warum"}
-        == {k: v for k, v in neu.items() if k != "warum"})
+        {k: v for k, v in normalisieren(bisher).items() if k != "notiz"}
+        == {k: v for k, v in neu.items() if k != "notiz"})
 
     neuer = {"id": abo_id}
     if bisher:
@@ -308,7 +308,7 @@ def speichern(abo: dict, pfad: Path | None = None, art: str = "abo") -> dict:
         neuer |= {k: v for k, v in bisher.items() if k != "id" and k not in _FELDER
                   and k not in (_notizen.NOTIZ, _notizen.VOM)}
     neuer |= eintrag
-    notiz = _notizen.fortschreiben(alt_notiz, str(abo.get("warum") or ""))
+    notiz = _notizen.fortschreiben(alt_notiz, str(abo.get("notiz") or ""))
     neuer |= notiz.als_dict()
     if gleich and notiz == alt_notiz:
         return bisher
@@ -450,21 +450,24 @@ def termine(abo: dict, *, ab: date, bis: date) -> list[date]:
     """Die Termine eines Vertrags im Fenster, wie er sie zahlt.
 
     Vom erklaerten Termin aus in beide Richtungen: `faellig` ist der NAECHSTE
-    Termin, nicht der erste. Nach einer Kuendigung kommt nichts mehr, und vor
-    dem Ende eines Vorrats auch nicht -- der ist bezahlt.
+    Termin, nicht der erste. Jeder Termin ist `faellig` plus ein ganzes
+    Vielfaches des Takts, direkt von `faellig` aus gerechnet -- nicht der Vorgaenger
+    plus ein Takt: Ein Termin am 31. kappt im Februar auf den 28. und kommt im
+    Maerz wieder am 31. Nach einer Kuendigung kommt nichts mehr, und vor dem Ende
+    eines Vorrats auch nicht -- der ist bezahlt.
     """
+    faellig, takt = abo["faellig"], abo["takt"]
     out = []
-    termin = abo["faellig"]
-    while termin > bis:
-        termin = plus_monate(termin, -abo["takt"])
-    while termin < ab:
-        termin = plus_monate(termin, abo["takt"])
-    while termin <= bis:
+    # Der erste Schritt liegt im Monat von `ab` oder davor; was davor liegt, faellt unten raus.
+    k = ((ab.year * 12 + ab.month) - (faellig.year * 12 + faellig.month)) // takt
+    while (termin := plus_monate(faellig, k * takt)) <= bis:
+        k += 1
+        if termin < ab:
+            continue
         gekuendigt = abo["gekuendigt_zum"] and termin > abo["gekuendigt_zum"]
         vorrat = abo["vorrat_bis"] and termin < abo["vorrat_bis"]
         if not gekuendigt and not vorrat:
             out.append(termin)
-        termin = plus_monate(termin, abo["takt"])
     return out
 
 

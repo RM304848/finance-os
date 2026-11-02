@@ -1,0 +1,70 @@
+{# Der Editor eines Vertrags: Felder, Buchungen, Geteilt. Gebraucht werden
+   `st` (der Entwurf), `info` (was der Server dazu weiß), `neu`, `art`,
+   `konten` und `kategorien`. Der Browser hält `st` und `info` und schickt sie
+   an /api/abos/editor, wenn sich etwas ändert; er baut nichts selbst zusammen. #}
+{% import "_abo_bausteine.html" as bs %}
+{% import "_notiz.html" as nz %}
+{% set wort = 'Versicherung' if art == 'versicherung' else 'Abo' %}
+{% set q = info.get('quelle') or {} %}
+{% set ab = abo_ableitung(st, info) %}
+<div class="abo-form">
+  {% if neu %}{% call bs.feld('Kennung') %}<input data-f="id" value="{{ st.id }}" placeholder="streaming-monatlich">{% endcall %}{% endif %}
+  {% call bs.feld('Name') %}<input data-f="name" value="{{ st.name }}" placeholder="Name des Vertrags">{% endcall %}
+  {# Der Betrag ohne Vorzeichen, wie die Richtung auf /planung: ein Vertrag
+     mit Termin ist immer Geld raus, und ein vergessenes Minus hat dort aus
+     einer Rate eine Einnahme gemacht. #}
+  {% set bt = st.get('betrag_text') %}
+  {% call bs.feld('Betrag', q.betrag or 'was bei der nächsten Verlängerung abgeht') %}<input data-f="betrag" value="{{ bt if bt is not none else ((st.betrag_cents|abs)|betrag if st.betrag_cents else '') }}"
+      placeholder="90,00" style="max-width:9rem"> <span class="hinweis">Ausgabe, ohne Vorzeichen</span>{% endcall %}
+  {% call bs.feld('Konto', q.konto) %}<select data-f="konto" data-no-combo>{% for k in konten %}<option value="{{ k.id }}"{% if k.id == st.konto %} selected{% endif %}>{{ k.id }}</option>{% endfor %}</select>{% endcall %}
+  {% set kat = kategorien|selectattr('id', 'equalto', st.kategorie)|first %}
+  {% call bs.feld('Kategorie', q.kategorie) %}<input data-f="kategorie" value="{{ kat.label if kat else (st.kategorie or '') }}"
+    data-id="{{ st.kategorie or '' }}" placeholder="{{ wort }} / Sonstiges">{% endcall %}
+  {% call bs.feld('Takt', q.takt) %}<select data-f="takt" data-no-combo style="max-width:12rem">{% for t, l in bs.TAKTE %}<option value="{{ t }}"{% if t == st.takt %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% endcall %}
+  {% call bs.feld('Nächster Termin', q.faellig) %}<input data-f="faellig" value="{{ st.faellig or '' }}" placeholder="2027-04-13" style="max-width:9rem">{% endcall %}
+  {% if art != 'versicherung' %}{% call bs.feld('Vorrat bis', 'nur bei vorausbezahlten Codes') %}<input data-f="vorrat_bis" value="{{ st.vorrat_bis or '' }}" placeholder="2028-04-06" style="max-width:9rem">{% endcall %}{% endif %}
+  {% call bs.feld('Gekündigt zum', 'danach rechnet die Prognose nicht mehr damit') %}<input data-f="gekuendigt_zum" value="{{ st.gekuendigt_zum or '' }}" placeholder="2027-12-31" style="max-width:9rem">{% endcall %}
+  {% call bs.feld('Zahlweg') %}<input data-f="weg" value="{{ st.weg or '' }}" placeholder="über einen Händler">{% endcall %}
+  {# Die Notiz des Vertrags: "Warum habe ich das" ist genau die Frage, die man sich beim
+     naechsten Termin stellt -- und die kein Betrag beantwortet. #}
+  {% call bs.feld('Notiz', nz.stand(info.notiz_vom) if st.notiz else '') %}<textarea data-f="notiz" class="notizfeld" rows="3"
+    placeholder="wofür es da ist, seit wann, worüber gekauft">{{ st.notiz or '' }}</textarea>{% endcall %}
+</div>
+
+{# --------------------------------------------------------- Buchungen #}
+{% set belege = info.belege or [] %}
+<div class="abo-teil"><strong>Buchungen</strong>
+  {% if info.preis %}
+  <p style="font-size:13px;margin:.2rem 0 .5rem"><span class="neg">Letzter Beleg {{ bs.eur(info.preis.gebucht) }}
+    am {{ info.preis.datum }}, eingetragen sind {{ bs.eur(info.preis.erwartet) }}.</span>
+    <button class="ghost" data-a="preis">Betrag übernehmen</button></p>
+  {% endif %}
+  {% if belege %}
+  <table>{% for b in belege %}{{ bs.buchungszeile(b, 'beleg-weg', loop.index0, 'entfernen') }}{% endfor %}</table>
+  {% else %}
+  <p class="muted klein">Noch keine Buchung zugeordnet — der Vertrag steht zusätzlich in der Prognose.</p>
+  {% endif %}
+  {% set vor = info.vorschlaege or [] %}
+  {% if vor %}
+  <p class="muted klein" style="margin:.6rem 0 .2rem">Neue Buchungen derselben Gegenpartei:</p>
+  <table>{% for b in vor %}{{ bs.buchungszeile(b, 'vorschlag', loop.index0, 'zuordnen') }}{% endfor %}</table>
+  {% endif %}
+  {% set fr = info.fruehere or [] %}
+  {% if fr %}
+  <details style="margin:.6rem 0 .2rem"><summary class="muted klein">Frühere Buchungen derselben Gegenpartei ({{ fr|length }}) —
+      solange sie fehlen, zählen sie in der Prognose doppelt</summary>
+    <p style="margin:.4rem 0">{% for g in ab.gruppen %}{% if not loop.first %} {% endif %}<button class="ghost" data-a="frueher-alle" data-c="{{ g.cents }}">alle {{ g.n }}× {{ bs.eur(g.cents) }} zuordnen</button>{% endfor %}</p>
+    <table>{% for b in fr %}{{ bs.buchungszeile(b, 'frueher', loop.index0, 'zuordnen') }}{% endfor %}</table></details>
+  {% endif %}
+  <form data-suche style="display:flex;gap:.5rem;margin:.6rem 0 .3rem">
+    <input data-q data-no-combo placeholder="Buchung suchen" style="flex:1;max-width:26rem"><button type="submit">Suchen</button></form>
+  <div data-treffer></div>
+</div>
+
+{% include "_abo_teilen.html" %}
+
+<div style="margin-top:1rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+  <button data-a="speichern">{{ 'Anlegen' if neu else 'Speichern' }}</button>
+  {% if neu %}<button class="ghost" data-a="abbrechen">Abbrechen</button>
+  {% else %}<button class="ghost" data-a="entfernen"{{ nz.geht_mit(st.notiz) }}>Löschen</button>{% endif %}
+  <span data-msg class="muted klein"></span></div>

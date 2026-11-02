@@ -34,7 +34,7 @@ OHNE_BASIS = {
     "csv_profile_custom": "Selbst zugeordnete CSV-Exporte (ingest/zuordnung.py)",
     "geteilt_custom": "Projekte, Personen und geteilte Buchungen (geteilt.py)",
     "module_custom": "Welche Module eingeschaltet sind (module.py)",
-    "prognosebasis_custom": "Was unter Prognosebasis abgewaehlt ist (forecast/prognosebasis.py)",
+    "prognosebasis_custom": "Was unter Fortschreibung abgewaehlt ist (forecast/prognosebasis.py)",
     "reihen_custom": "Was der Haushalt ueber Reihen festlegt (reihen.py)",
     "zinssaetze_custom": "Die datierten Zinssaetze je Konto (zinssaetze.py)",
 }

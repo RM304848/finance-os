@@ -1,0 +1,15 @@
+{# Die Notiz eines Eintrags: sichtbar, aufklappbar, mit dem Datum ihrer letzten
+   Aenderung -- oder "ohne Datum", wo sie aus der Zeit vor den Notizen stammt.
+   `text` und `vom` kommen aus finctl/notizen.py (`notiz`, `notiz_vom`). #}
+{% macro stand(vom) -%}{{ ('vom ' ~ vom) if vom else 'ohne Datum' }}{%- endmacro %}
+
+{% macro zeile(text, vom) -%}
+{% if text %}<details class="notiz"><summary>Notiz <span class="fein">{{ stand(vom) }}</span></summary>
+  <div class="notiztext">{{ text }}</div></details>{% endif %}
+{%- endmacro %}
+
+{# Das Attribut eines Knopfes, der den Eintrag samt Notiz aus der Datei nimmt: Die
+   Rueckfrage (`rueckfrage` in base.html) liest es und sagt, dass die Notiz mitgeht. #}
+{% macro geht_mit(text) -%}
+{%- if text %} data-notiz-geht="{{ text|notiz_geht_mit }}"{% endif -%}
+{%- endmacro %}

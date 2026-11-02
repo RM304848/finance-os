@@ -9,8 +9,9 @@ es die Seitendatei nicht mehr.
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -773,7 +774,7 @@ def test_a_loan_value_the_page_replaced_stays_in_the_note_and_the_notes_meet_bas
 
 def test_what_the_old_reader_ignored_of_the_page_is_reported():
     _, gelegt = _legen(KREDITE_PAAR, KREDITE, {**KREDITE_SEITE, "erfunden": {"x": 1}})
-    assert "erfunden (Schluessel der Seite, den kein Leser kannte)" in gelegt.ungelesen
+    assert "erfunden (Schlüssel der Seite, den kein Leser kannte)" in gelegt.ungelesen
 
 
 def test_a_loan_the_page_has_and_the_base_lacks_may_carry_its_own_follow_up_and_no_template():
@@ -1364,7 +1365,7 @@ def test_the_two_notes_of_the_area_meet_base_first_and_the_page_key_nobody_read_
              "erfunden": 1}
     neu, gelegt = _legen_b(BESTAENDE, seite, tmp_path, "giro-a")
     assert neu["notizen"]["bereich"]["notiz"].startswith("Fuer die Bestaende.\n\nAus der Seite.")
-    assert any("erfunden (Schluessel" in u for u in gelegt.ungelesen)
+    assert any("erfunden (Schlüssel" in u for u in gelegt.ungelesen)
 
 
 def test_the_init_mirror_takes_every_stand_under_its_own_date(tmp_path):
@@ -2215,9 +2216,12 @@ def test_settings_the_twelve_values_go_to_the_path_the_loader_gave_them():
              "gehalt_steigerung_pa": 0.03, "salary_floor_cents": 400_000, "teilzeit_anteil": 0.8,
              "teilzeit_ab": "2040-01", "lebenserwartung": 92, "abzug_renten": 0.3,
              "aufbrauchen": 0.9}
-    assert set(werte) == set(ann.UEBERSCHREIBBAR)
+    # Die zwei Annahmen seit 8c1 (Steuersatz, Basiszins) gab es in der alten Tabelle nie.
+    alt = {k: p for k, p in ann.UEBERSCHREIBBAR.items()
+           if k not in ("steuersatz_kapital", "basiszins_pa")}
+    assert set(werte) == set(alt)
     neu, _ = _legen(ANNAHMEN_PAAR, ANNAHMEN, {"einstellungen": werte})
-    for schluessel, pfad in ann.UEBERSCHREIBBAR.items():
+    for schluessel, pfad in alt.items():
         knoten = neu
         for teil in pfad:
             knoten = knoten[teil]
@@ -2590,11 +2594,7 @@ def test_settings_init_writes_nothing_into_the_settings_table(tmp_path, monkeypa
     monkeypatch.setattr(nachfuehren, "CONFIG_DIR", config)
     lauf = CliRunner().invoke(cli.app, ["init", "--json"])
     assert lauf.exit_code == 0, lauf.output
-    c = sqlite3.connect(db)
-    try:
-        assert c.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 0
-    finally:
-        c.close()
+    assert _tabellen(db) == set(), "das Schema legt die Tabelle settings nicht mehr an"
 
 
 def test_settings_the_app_stops_for_every_page_file_of_every_pair_in_a_migrated_folder(tmp_path):
@@ -2629,17 +2629,41 @@ def test_settings_the_app_stops_for_every_page_file_of_every_pair_in_a_migrated_
 # ------------------------------------- settings: die Tabelle gegen die Datei (vor dem Lauf)
 
 
-def _tabelle(wurzel: Path, *zeilen: tuple) -> Path:
-    """Eine `finance.db` mit Zeilen in `settings`: (Schluessel, Wert) oder (..., Notiz)."""
+ALT = "2026-10-01"         # der Tag der Zeilen in der Tabelle
+VORHER = (2026, 9, 1)      # die Datei ist aelter als die Zeilen
+LEGACY = ("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, note TEXT, "
+          "updated_at TEXT NOT NULL)")
+
+
+def _tabelle(wurzel: Path, *zeilen: tuple, datei_aelter: bool = False) -> Path:
+    """Eine `finance.db` aelteren Standes mit Zeilen in `settings`: (Schluessel, Wert[, Notiz]).
+
+    Das Schema legt die Tabelle nicht mehr an, also legt der Test sie wie frueher an. Mit
+    `datei_aelter` ist `settings_custom.yaml` vor den Zeilen geaendert worden, sonst danach.
+    """
     db = wurzel / "data" / "finance.db"
     db.parent.mkdir(exist_ok=True)
     c = connect(init_db(db))
+    c.execute(LEGACY)
     for key, wert, *notiz in zeilen:
         c.execute("INSERT INTO settings (key, value, note, updated_at) VALUES (?,?,?,?)",
-                  (key, wert, notiz[0] if notiz else None, "2026-10-01"))
+                  (key, wert, notiz[0] if notiz else None, ALT))
     c.commit()
     c.close()
+    if datei_aelter:
+        stand = datetime(*VORHER).timestamp()
+        os.utime(wurzel / "config" / "settings_custom.yaml", (stand, stand))
     return db
+
+
+def _tabellen(db: Path) -> set[str]:
+    """Die Tabellen `settings` in dieser Datenbank (leer oder mit einem Namen)."""
+    c = sqlite3.connect(db)
+    try:
+        return {r[0] for r in c.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='settings'")}
+    finally:
+        c.close()
 
 
 GLEICH = (("floor_cents:giro", "90000"), ("floor_cents:karte", "5000"),
@@ -2670,7 +2694,8 @@ def test_settings_a_row_only_in_the_table_stops_the_run_and_nothing_is_written(t
 
 def test_settings_another_value_in_the_table_stops_the_run(tmp_path):
     wurzel = _settings_ordner(tmp_path)
-    _tabelle(wurzel, *(z if z[0] != "floor_cents:giro" else (z[0], "80000") for z in GLEICH))
+    _tabelle(wurzel, *(z if z[0] != "floor_cents:giro" else (z[0], "80000") for z in GLEICH),
+             datei_aelter=True)
     vorher = _pruefsumme(wurzel)
     plan, sicherung, _ = umstellen.ausfuehren(wurzel, heute=HEUTE)
     assert sicherung is None and _pruefsumme(wurzel) == vorher
@@ -2684,7 +2709,7 @@ def test_settings_a_note_in_the_table_stops_the_run(tmp_path):
     vorher = _pruefsumme(wurzel)
     plan, sicherung, _ = umstellen.ausfuehren(wurzel, heute=HEUTE)
     assert sicherung is None and _pruefsumme(wurzel) == vorher
-    assert any("`teilzeit_ab` traegt eine Notiz" in f and "Nur hier begruendet." in f
+    assert any("`teilzeit_ab` trägt eine Notiz" in f and "Nur hier begruendet." in f
                for f in plan.fehler)
 
 
@@ -2694,7 +2719,7 @@ def test_settings_the_probe_stops_for_the_same_rows_and_writes_no_report(tmp_pat
     vorher = _pruefsumme(wurzel)
     plan, bericht = umstellen.probieren(wurzel, tmp_path / "Probe", heute=HEUTE)
     assert bericht is None and plan.fehler and _pruefsumme(wurzel) == vorher
-    assert not (tmp_path / "Probe" / "umstellung_2026-10-08.md").exists()
+    assert not (tmp_path / "Probe").exists()           # auch keine Kopie von config/
 
 
 def test_settings_without_a_ledger_or_a_page_file_there_is_nothing_to_compare(tmp_path):
@@ -2709,3 +2734,120 @@ def test_settings_without_a_ledger_or_a_page_file_there_is_nothing_to_compare(tm
     nur_datei = _settings_ordner(tmp_path / "c")
     _tabelle(nur_datei, ("teilzeit_ab", "2040-01"))
     assert not umstellen.planen(nur_datei / "config").fehler
+
+
+def test_settings_a_value_that_differs_only_because_the_file_is_newer_does_not_stop_the_run(
+        tmp_path):
+    wurzel = _settings_ordner(tmp_path)
+    db = _tabelle(wurzel, *(z if z[0] != "floor_cents:giro" else (z[0], "80000") for z in GLEICH))
+    plan = umstellen.planen(wurzel / "config")
+    assert not plan.fehler
+    assert any("`floor_cents:giro`: 80000, in settings_custom.yaml 90000" in h
+               and "Datei ist neuer" in h for h in plan.tabelle_hinweise)
+    plan, sicherung, bericht = umstellen.ausfuehren(wurzel, heute=HEUTE)
+    assert sicherung is not None and not plan.fehler
+    assert "Datei gilt: Tabelle settings, Zeile `floor_cents:giro`" in bericht.read_text(
+        encoding="utf-8")
+    # Es gilt der Wert der Datei.
+    gelesen = yaml.safe_load((wurzel / "config" / "forecast.yaml").read_text(encoding="utf-8"))
+    assert gelesen["account_roles"]["giro"]["floor_cents"] == 90_000
+    assert _tabellen(db) == set()
+
+
+def test_settings_a_row_missing_in_the_file_stops_the_run_even_when_the_file_is_newer(tmp_path):
+    wurzel = _settings_ordner(tmp_path)
+    _tabelle(wurzel, *GLEICH, ("floor_cents:alt", "1234"))
+    plan = umstellen.planen(wurzel / "config")
+    assert any("`floor_cents:alt`" in f for f in plan.fehler)
+
+
+def test_settings_a_note_the_file_carries_does_not_stop_the_run(tmp_path):
+    wurzel = _settings_ordner(tmp_path)
+    # EINSTELLUNGEN traegt "Ab dort kuerzer." in der Notiz von `teilzeit_ab`.
+    _tabelle(wurzel, *GLEICH[:-1], ("teilzeit_ab", "2040-01", "Ab dort  kuerzer."))
+    assert not umstellen.planen(wurzel / "config").fehler
+    # Eine andere Notiz haelt den Lauf an, bis sie in die Datei uebernommen ist.
+    anders = _settings_ordner(tmp_path / "anders")
+    _tabelle(anders, *GLEICH[:-1], ("teilzeit_ab", "2040-01", "Nur hier begruendet."))
+    assert umstellen.planen(anders / "config").fehler
+    seite = anders / "config" / "settings_custom.yaml"
+    daten = yaml.safe_load(seite.read_text(encoding="utf-8"))
+    daten["notizen"]["einstellungen.teilzeit_ab"]["notiz"] += "\nNur hier begruendet."
+    seite.write_text(yaml_text(daten), encoding="utf-8")
+    assert not umstellen.planen(anders / "config").fehler
+
+
+def test_settings_after_a_run_the_table_is_gone_from_the_database(tmp_path):
+    wurzel = _settings_ordner(tmp_path)
+    db = _tabelle(wurzel, *GLEICH)
+    plan, sicherung, bericht = umstellen.ausfuehren(wurzel, heute=HEUTE)
+    assert sicherung is not None and plan.tabelle_entfernt
+    assert _tabellen(db) == set()
+    assert "Die Tabelle ist aus der Datenbank entfernt." in bericht.read_text(encoding="utf-8")
+    # Der Rest der Datenbank ist noch da.
+    c = sqlite3.connect(db)
+    try:
+        assert c.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0
+    finally:
+        c.close()
+
+
+def test_settings_a_stopped_run_and_the_probe_leave_the_table_alone(tmp_path):
+    wurzel = _settings_ordner(tmp_path)
+    db = _tabelle(wurzel, *GLEICH, ("floor_cents:alt", "1234"))
+    umstellen.ausfuehren(wurzel, heute=HEUTE)
+    assert _tabellen(db) == {"settings"}
+    ok = _settings_ordner(tmp_path / "ok")
+    db = _tabelle(ok, *GLEICH)
+    plan, bericht = umstellen.probieren(ok, tmp_path / "Probe", heute=HEUTE)
+    assert bericht is not None and not plan.tabelle_entfernt
+    assert _tabellen(db) == {"settings"}
+    assert "würde beim Umstellen" in bericht.read_text(encoding="utf-8")
+
+
+def test_settings_discarding_lets_the_run_through_and_names_what_goes(tmp_path):
+    wurzel = _settings_ordner(tmp_path)
+    db = _tabelle(wurzel, *GLEICH[:-1], ("teilzeit_ab", "2040-01", "Nur hier begruendet."),
+                  ("floor_cents:alt", "1234"))
+    plan, sicherung, _ = umstellen.ausfuehren(wurzel, heute=HEUTE)
+    assert sicherung is None and plan.fehler                       # ohne Wunsch: anhalten
+    plan, sicherung, bericht = umstellen.ausfuehren(wurzel, heute=HEUTE, tabelle_verwerfen=True)
+    assert sicherung is not None and not plan.fehler
+    text = bericht.read_text(encoding="utf-8")
+    assert "Verworfen (auf Wunsch): Tabelle settings, Zeile `floor_cents:alt` = 1234" in text
+    assert "Nur hier begruendet." in text
+    assert _tabellen(db) == set()
+
+
+def test_settings_without_a_page_file_the_table_is_not_touched(tmp_path):
+    """Kein Abgleich, also auch kein Entfernen: Zeilen ohne Vergleich werden nie verworfen."""
+    wurzel = _settings_ordner(tmp_path, **{"abos.yaml": "abos:\n  # Kommentar\n  - id: a\n"})
+    db = _tabelle(wurzel, *GLEICH, ("floor_cents:alt", "1"))
+    (wurzel / "config" / "settings_custom.yaml").unlink()
+    plan, sicherung, _ = umstellen.ausfuehren(wurzel, heute=HEUTE)
+    assert sicherung is not None and not plan.tabelle_geprueft and not plan.tabelle_entfernt
+    assert _tabellen(db) == {"settings"}
+
+
+def test_settings_a_fresh_ledger_has_no_settings_table(tmp_path):
+    db = init_db(tmp_path / "neu.db")
+    assert _tabellen(db) == set()
+
+
+def test_settings_the_command_names_the_way_out_and_discards_on_request(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+
+    from finctl import cli
+
+    wurzel = _settings_ordner(tmp_path)
+    db = _tabelle(wurzel, *GLEICH, ("floor_cents:alt", "1234"))
+    monkeypatch.setattr(cli, "CONFIG_DIR", wurzel / "config")
+    lauf = CliRunner().invoke(cli.app, ["umstellen", "--probe", str(tmp_path / "Probe")])
+    assert lauf.exit_code == 1, lauf.output
+    assert "floor_cents:alt" in lauf.output and "--tabelle-verwerfen" in lauf.output
+    assert "keine Kopie geschrieben" in lauf.output and not (tmp_path / "Probe").exists()
+    lauf = CliRunner().invoke(cli.app, ["umstellen", "--tabelle-verwerfen"])
+    assert lauf.exit_code == 0, lauf.output
+    assert "Verworfen: Tabelle settings, Zeile `floor_cents:alt`" in lauf.output
+    assert "Die Tabelle settings ist aus der Datenbank entfernt." in lauf.output
+    assert _tabellen(db) == set()

@@ -1,0 +1,9 @@
+<div class="wrap"><table class="detail">
+  <tr><th style="width:9rem">Stand</th><td>{{ 'eingetragen' if anbindung else 'ausgeschaltet' }}</td></tr>
+  {% if anbindung %}
+  <tr><th>Adresse</th><td>{{ anbindung.adresse }}</td></tr>
+  <tr><th>Modell</th><td>{{ anbindung.modell }}</td></tr>
+  <tr><th>Ziel</th><td>{{ anbindung.host }} — {{ 'bleibt auf diesem Rechner' if anbindung.lokal else 'verlässt den Rechner' }}</td></tr>
+  <tr><th>Schlüssel</th><td>{{ 'eingetragen' if schluessel else 'keiner' }}</td></tr>
+  {% endif %}
+</table></div>

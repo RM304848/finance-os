@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import copy as _copy
 import datetime as _dtm
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from finctl.dateien import yaml_lesen
 from finctl.web.basis import (
+    CONFIG_DIR,
     TEMPLATES,
     _jsonfaehig,
     adresse,
     conn,
+    notiz_felder,
+    stueck,
     umleiten,
 )
 
@@ -23,6 +28,56 @@ router = APIRouter()
 # eine Versicherung anders gepflegt wird als ein Abo (kein Vorrat, anderer
 # Rhythmus der Unterlagen).
 REITER = {"abos": ("abo", "Abos"), "versicherungen": ("versicherung", "Versicherungen")}
+
+
+def abo_zustand(a: dict) -> dict:
+    """Der Entwurf eines Editors: eine Kopie des Vertrags.
+
+    Gespeichert wird immer der ganze Vertrag; der Server legt davon nur ab, was
+    von abos.yaml abweicht. Der Browser haelt den Entwurf, aendert ihn und
+    schickt ihn an `/api/abos/editor` zurueck, wenn der Editor neu gezeichnet
+    werden muss.
+    """
+    feste = ("id", "name", "kategorie", "konto", "betrag_cents", "takt", "faellig",
+             "vorrat_bis", "gekuendigt_zum", "weg", "notiz")
+    return _copy.deepcopy({
+        **{f: a.get(f) for f in feste},
+        "buchungen": a.get("buchungen") or [], "ignoriert": a.get("ignoriert") or [],
+        "geteilt": a.get("geteilt") or {"besetzung": [], "zeitraeume": []}})
+
+
+def _ableitung(st: dict, info: dict) -> dict:
+    """Was der Editor aus Entwurf und Wissen des Servers ordnet, bevor er zeichnet.
+
+    Fruehere Buchungen nach Betrag gruppiert, die haeufigste Gruppe zuerst;
+    Zeitraeume mit ihrer Stelle im Entwurf, der juengste oben.
+    """
+    gruppen: dict[int, int] = {}
+    for b in info.get("fruehere") or []:
+        gruppen[b["amount_cents"]] = gruppen.get(b["amount_cents"], 0) + 1
+    return {
+        "gruppen": [{"cents": c, "n": n} for c, n in
+                    sorted(gruppen.items(), key=lambda kv: -kv[1])],
+        "zeitraeume": sorted(enumerate(st["geteilt"]["zeitraeume"]),
+                             key=lambda t: t[1]["von"], reverse=True)}
+
+
+TEMPLATES.env.globals["abo_ableitung"] = _ableitung
+
+
+def _auswahl(c) -> tuple[list[dict], list[dict]]:
+    """Konten und Kategorien, aus denen der Editor auswaehlen laesst."""
+    konten = [dict(r) for r in c.execute(
+        "SELECT id, display_name FROM accounts "
+        "WHERE ingest_mode = 'parsed' AND active = 1 ORDER BY display_name")]
+    kategorien = [
+        {"id": r["id"], "label": f"{r['oberbegriff']} / {r['name']}"
+         if r["oberbegriff"] else r["name"]}
+        for r in c.execute(
+            "SELECT k.id, k.name, o.name AS oberbegriff FROM mgmt_categories k "
+            "LEFT JOIN mgmt_categories o ON o.id = k.parent_id "
+            "WHERE k.parent_id IS NOT NULL ORDER BY k.id")]
+    return konten, kategorien
 
 
 @router.get("/vertraege", response_class=HTMLResponse)
@@ -59,16 +114,10 @@ def _vertragsseite(request: Request, art: str, ansicht: str, reiter: list[dict])
             liste, fehler = _ab.laden(art=art), None
         except ValueError as exc:
             liste, fehler = [], str(exc)
-        konten = [dict(r) for r in c.execute(
-            "SELECT id, display_name FROM accounts "
-            "WHERE ingest_mode = 'parsed' AND active = 1 ORDER BY display_name")]
-        kategorien = [
-            {"id": r["id"], "label": f"{r['oberbegriff']} / {r['name']}"
-             if r["oberbegriff"] else r["name"]}
-            for r in c.execute(
-                "SELECT k.id, k.name, o.name AS oberbegriff FROM mgmt_categories k "
-                "LEFT JOIN mgmt_categories o ON o.id = k.parent_id "
-                "WHERE k.parent_id IS NOT NULL ORDER BY k.id")]
+        konten, kategorien = _auswahl(c)
+        datei, schluessel = CONFIG_DIR / _ab.ARTEN[art][0], _ab.ARTEN[art][1]
+        roh = {str(e.get("id")): e for e in
+               ((yaml_lesen(datei) or {}).get(schluessel) or [] if datei.exists() else [])}
         daten = []
         for a in liste:
             termine = _ab.posten([a], a["konto"], ab=heute,
@@ -85,28 +134,84 @@ def _vertragsseite(request: Request, art: str, ansicht: str, reiter: list[dict])
                 "vorschlaege": _ab.vorschlaege(c, a),
                 "fruehere": _ab.fruehere(c, a),
                 "laufend": _ab.laufend(c, a, heute=heute),
+                "notiz_vom": notiz_felder(roh.get(a["id"]))["notiz_vom"],
             }))
     finally:
         c.close()
     return TEMPLATES.TemplateResponse(request, "abos.html", {
         "abos": daten, "fehler": fehler, "konten": konten,
+        "zustaende": {a["id"]: abo_zustand(a) for a in daten},
         "kategorien": kategorien, "heute": heute.isoformat(),
         "art": art, "ansicht": ansicht, "reiter": reiter,
         "dateien": [f"config/{_ab.ARTEN[art][0]}"]})
 
 
 @router.get("/api/abos/buchungen")
-def api_abo_buchungen(q: str = ""):
-    """Abbuchungen, aus denen ein Abo angelegt werden kann."""
+def api_abo_buchungen(q: str = "", ausser: list[str] = Query(default=[])):
+    """Abbuchungen, aus denen ein Abo angelegt werden kann.
+
+    `html` ist die Trefferliste, gerendert wie jedes Stueck des Editors;
+    Buchungen in `ausser` (die dem Vertrag schon zugeordneten) fehlen darin.
+    """
     from finctl import abos as _ab
 
     if len(q.strip()) < 2:
         return {"rows": []}
     c = conn()
     try:
-        return {"rows": _ab.buchungen(c, q)}
+        rows = [b for b in _ab.buchungen(c, q) if b["dedup_hash"] not in set(ausser)]
     finally:
         c.close()
+    return {"rows": rows, "html": stueck("_abo_treffer.html", rows=rows)}
+
+
+def _editor_html(art: str, st: dict, info: dict, neu: bool) -> str:
+    c = conn()
+    try:
+        konten, kategorien = _auswahl(c)
+    finally:
+        c.close()
+    return stueck("_abo_editor.html", art=art, st=st, info=info, neu=neu,
+                  konten=konten, kategorien=kategorien)
+
+
+@router.post("/api/abos/editor")
+async def api_abo_editor(request: Request, art: str = "abo"):
+    """Der Editor eines Vertrags als fertiges Stueck.
+
+    Der Browser schickt den Entwurf (`st`) und was er dazu weiss (`info`), der
+    Server zeichnet. Dieselbe Vorlage, die /vertraege beim Laden einbindet.
+    """
+    from finctl import abos as _ab
+
+    if art not in _ab.ARTEN:
+        return JSONResponse({"error": f"unbekannte Art {art}"}, status_code=400)
+    body = await request.json()
+    return {"html": _editor_html(art, body["st"], body.get("info") or {}, bool(body.get("neu")))}
+
+
+@router.post("/api/abos/neu")
+def api_abo_neu(art: str = "abo"):
+    """Der Kasten fuer einen neuen Vertrag samt leerem Entwurf.
+
+    POST, obwohl nichts geaendert wird: die Antwort haengt nur von `art` ab und
+    ist keine Seite, die sich lesen laesst.
+    """
+    from finctl import abos as _ab
+
+    if art not in _ab.ARTEN:
+        return JSONResponse({"error": f"unbekannte Art {art}"}, status_code=400)
+    c = conn()
+    try:
+        konten, kategorien = _auswahl(c)
+    finally:
+        c.close()
+    st = abo_zustand({"id": "", "name": "", "kategorie": "", "weg": "", "notiz": "",
+                      "konto": konten[0]["id"] if konten else "", "takt": 12, "faellig": ""})
+    info = {"belege": [], "vorschlaege": [], "fruehere": [], "quelle": {}}
+    return {"st": st, "info": info, "html": stueck(
+        "_abo_neu.html", art=art, st=st, info=info, neu=True,
+        konten=konten, kategorien=kategorien)}
 
 
 @router.get("/api/abos/eingaenge")

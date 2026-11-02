@@ -1,11 +1,12 @@
 {% extends "base.html" %}{% block n_renten %}on{% endblock %}
-{% block title %}Renten{% endblock %}
+{% block title %}Rentenquellen{% endblock %}
 {% block body %}
-<h1>Renten</h1>
+{% import "_notiz.html" as nz %}
+<h1>Rentenquellen</h1>
 <p class="zweck">Was im Ruhestand hereinkommt — laut Renteninformation und Standmitteilung.</p>
 
 {% if not zeilen %}
-<div class="note">Noch keine Rente eingetragen. Fang mit der gesetzlichen an: unten anlegen.</div>
+<div class="note">Noch keine Rentenquelle eingetragen. Fang mit der gesetzlichen an: unten anlegen.</div>
 {% else %}
 {# Eine Quelle, eine Zeile; die Notiz als Unterzeile darunter
    (bearbeitungstabellen). Der eine Knopf heisst "unverändert", bis getippt
@@ -32,12 +33,13 @@
         oninput="renteGeaendert(this)"></td>
     <td class="aktionen"><button class="ghost" data-knopf onclick="renteSpeichern(this)"
         title="Denselben Betrag mit heutigem Datum ablegen">unverändert</button>
-      <button class="ghost" onclick="renteLoeschen(this)">löschen</button>
+      <button class="ghost" onclick="renteLoeschen(this)"{{ nz.geht_mit(z.notiz) }}>löschen</button>
       <span class="meldung fein"></span></td>
   </tr>
   <tr class="unterzeile" data-zu="{{ q.id }}"><td></td>
     <td colspan="6"><textarea class="still" data-feld="notiz" rows="1"
-        placeholder="Notiz — woher kommt die Zahl?" oninput="renteGeaendert(this)">{{ z.notiz|e }}</textarea></td></tr>
+        placeholder="Notiz — woher kommt die Zahl?" oninput="renteGeaendert(this)">{{ z.notiz|e }}</textarea>
+      {%- if z.notiz %}<span class="muted fein">Notiz {{ nz.stand(z.notiz_vom) }}</span>{% endif %}</td></tr>
   {% if z.modell %}
   <tr class="unterzeile modell" data-modell="{{ q.id }}"><td></td>
     <td colspan="6" class="muted klein">{{ z.modell }}</td></tr>
@@ -51,7 +53,7 @@
 {% endif %}
 
 <details class="klapp" id="rente-neu"{% if not zeilen %} open{% endif %}>
-  <summary>Rente oder Police anlegen</summary>
+  <summary>Rentenquelle anlegen</summary>
   <div class="zeilen-form">
     <label>Name<input id="rn-name" placeholder="Gesetzliche Rente" maxlength="80"></label>
     <label>Art<select id="rn-art" data-no-combo>
@@ -69,7 +71,7 @@
   <p>Der Betrag, wie er dasteht, ohne Umrechnung.</p>
   <p>Nennt das Schreiben mehrere Wertentwicklungen, nimm die mit 7 %.</p>
   <p>Effektivkosten stehen in der Standmitteilung oder im Produktinformationsblatt.</p>
-  <p>Der Wert einer Police gehört in den Monatsabschluss, zu den Rentenversicherungen.</p>
+  <p>Der Stand einer Police gehört in den Monatsabschluss, zu den Rentenversicherungen.</p>
 </details>
 
 <style>
@@ -145,7 +147,7 @@ function renteSpeichern(knopf){
   renteSenden(knopf, body);
 }
 function renteLoeschen(knopf){
-  if (!confirm('Diese Rente löschen?')) return;
+  if (!rueckfrage('Diese Rentenquelle löschen?', knopf)) return;
   renteSenden(knopf, {key: knopf.closest('tr').dataset.key, loeschen: true});
 }
 async function renteAnlegen(knopf){

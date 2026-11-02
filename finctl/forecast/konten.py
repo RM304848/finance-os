@@ -891,7 +891,7 @@ def kontoprognose(conn: sqlite3.Connection, account: str, fcfg: dict,
     # `wegfall_posten`.
     kredite = {r["id"] for r in conn.execute(
         "SELECT id FROM mgmt_categories WHERE parent_id = 'kredit'")}
-    # Unter Prognosebasis abgewaehlt: gilt fuer BEIDE Rechnungen.
+    # Unter Fortschreibung (/prognosebasis) abgewaehlt: gilt fuer BEIDE Rechnungen.
     abgewaehlt = _pb.nicht_fortschreiben() if abwahl else set()
     # Einmaliges kommt nicht wieder: Kategorien mit dem Merkmal fallen heraus, gesetzte
     # Buchungen stehen in den Hashes der Messung (`_ausschluss_hashes`).
@@ -932,7 +932,7 @@ def abgeleitete_posten(conn, account: str, fcfg: dict,
                        reihen: Reihen | None = None) -> list:
     """Die aus dem Ledger abgeleiteten Posten eines Kontos.
 
-    Eigene Funktion, weil die Prognosebasis auf /annahmen dieselben Posten zeigt, die die
+    Eigene Funktion, weil die Fortschreibung auf /prognosebasis dieselben Posten zeigt, die die
     Kontoprognose rechnet -- eine zweite Ableitung daneben liefe auseinander.
 
     `stichtag` (ein Monatserster) rechnet so, als waere heute dieser Tag:

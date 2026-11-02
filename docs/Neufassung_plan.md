@@ -412,6 +412,9 @@ bewegt viele Zahlen, und der Umstieg soll nicht auf ihn warten.
 
 ### 6. Oberfläche nach dem Glossar (gleich in den Zahlen)
 
+**Abgeschlossen am 01.11.2026** (6a bis 6d, `docs/schritt6_bis_8.md`).
+
+
 Begriffe nach `CONTEXT.md` (Themenkasse, Vorgang, Anlageklasse,
 Untergrenze), Text nur über Begriffe, Notizen sichtbar und datiert. Die
 Zahlenebene der Referenz bleibt gleich, die Textebene wird mit Absicht neu
@@ -447,11 +450,17 @@ der Rest erledigt.
 
 ### 7. KI über die Schnittstelle
 
+**Abgeschlossen am 01.11.2026** (7a Kopiervorlage, 7b `finctl mcp` mit Vorschlägen, 7c Schnittstelle nach Wahl; `docs/schritt6_bis_8.md`).
+
+
 ADR 0002, in dieser Reihenfolge: erst die Kopiervorlage, dann der
 MCP-Zugang mit lokalem Modell, dann eine API nach Wahl. Erst jetzt, weil die
 Schnittstelle die Handentscheidungen aus Schritt 1 bis 5 ausdrücken muss.
 
 ### 8. Die schlanke Fassung
+
+**Abgeschlossen am 01.11.2026** (8a bis 8c2, `docs/schritt6_bis_8.md`). Offen für danach: Immobiliendarlehen in der App, Regel mit Teilung, Steuerzuordnung, tote Schlüssel mit dem Haushalt.
+
 
 Basis und Module, Einrichtung ohne Texteditor, ein Paket zum Weitergeben.
 Voraussetzung ist, dass die Umbenennungsprobe und der Musterhaushalt zeigen,

@@ -6,6 +6,169 @@ macht daraus beim Veröffentlichen die neue Version.
 
 ## Unveröffentlicht
 
+## 0.6.0 – 2026-11-02
+
+**Auf einen Blick:** Was bisher nur im Texteditor ging, geht jetzt auf den Seiten, und ein
+KI-Modell kann helfen, aber nur, wenn du es willst.
+- **Selbst einrichten:** Konten bearbeiten und schließen, Positionen im Monatsabschluss anlegen und
+  entfernen, Oberkategorien mit **Fixkosten** und **Einmalig**, dazu Steuersatz und Basiszins auf
+  den **Annahmen**.
+- **Ein KI-Modell deiner Wahl:** Die neue Seite **Vorlagen** erzeugt Texte zum Kopieren in ein
+  Modell. Wer will, richtet eine **Anbindung** ein oder verbindet ein Modell über `finctl mcp`.
+  Was ein Modell vorschlägt, steht auf **Vorschläge** und gilt erst, wenn du es übernimmst. Ohne
+  dein Zutun sendet die App nichts.
+- **Notizen** stehen sichtbar am Eintrag, mit dem Datum ihrer letzten Änderung.
+- **Dieselben Wörter überall:** Themenkassen, Buchungen, Objekte, Verträge, Klammern, Stand und
+  die übrigen Begriffe des Handbuchs. Die Zahlen bleiben dieselben.
+- **Fortschreibung:** Eine eigene Seite zeigt, woraus Konten und Hochrechnung rechnen.
+- **Behoben:** Verträge am Monatsende rutschen nicht mehr auf den 28., und im Vertragseditor geht
+  beim Tippen kein Buchstabe mehr verloren.
+- **Im Paket** liegt eine Anleitung als HTML und PDF, auch für den Fall, dass Windows die App nicht
+  startet.
+
+Die Einzelheiten:
+
+**Neu:**
+
+- **Vorlagen für ein KI-Modell:** Unter **Vorlagen** (Gruppe Stammdaten) erzeugt die App einen
+  Text, den du selbst in ein Modell deiner Wahl kopierst. Es gibt drei: **Buchungen einordnen**,
+  **Monat erklären** und **Frage zur Prognose**. Jeder Text nennt die Begriffe der App, die Lage
+  (die Zahlen und Einträge, die die Frage braucht) und die Frage mit der Form der Antwort. Die App
+  sendet nichts. Die Antwort fügst du wieder ein; sie wird geprüft und als Vorschlag gezeigt. Beim
+  Einordnen kannst du Zeilen anhaken und als Regel übernehmen, bei den beiden anderen markiert die
+  Seite Kennungen und Beträge, die nicht in der Lage stehen. Ohne dein Anhaken wird nichts
+  geschrieben. Die Vorschläge auf der Seite **Regeln** sind dorthin umgezogen; ein Link bleibt.
+- **Vorlage direkt an ein Modell senden (ausgeschaltet, bis du es einrichtest):** Auf der neuen
+  Seite **Anbindung** (erreichbar über **Vorlagen**) trägst du die Adresse einer Schnittstelle, das
+  Modell und, wenn sie einen verlangt, den Schlüssel ein. Ein Server auf diesem Rechner geht auch.
+  Danach hat **Vorlagen** den Knopf **Senden …**: Er zeigt zuerst den ganzen Text, der hinausgeht,
+  und den Rechnernamen („Das verlässt den Rechner“, oder bei einem Server auf diesem Rechner: der
+  Text bleibt hier). Gesendet wird erst auf einen weiteren Knopf, jedes Mal neu. Die Antwort steht
+  im Feld wie eine eingefügte und wird genauso geprüft; übernommen wird nur, was du bestätigst.
+  Der Schlüssel liegt in einer eigenen Datei im Datenordner, nur für dich lesbar, und wird nie
+  wieder angezeigt; **Schlüssel entfernen** und **Anbindung entfernen** machen alles rückgängig.
+  Ohne Eintrag verbindet sich die App mit nichts, und außer diesem Knopf sendet sie nichts.
+- **Vorschläge von einem Modell:** Ein Modell deiner Wahl kann sich über den Befehl `finctl mcp`
+  (in der App: das Programm mit dem Argument `mcp`) mit Finance OS verbinden. Es liest Konten und
+  Kontoprognose, die Jahresrechnung, die Fortschreibung, Buchungen, Verträge, Klammern, Kredite,
+  Objekte, Ziele und die offenen Punkte des Monatsabschlusses, so wie die Seiten sie zeigen, ohne
+  Notizen und ohne Nummern. Es kann Regeln, Planzeilen, Kredite und Notizen **vorschlagen**,
+  schreibt aber nie selbst. Die neue Seite **Vorschläge** (Gruppe Stammdaten) zeigt jeden
+  Vorschlag und was sich ändern würde; **Übernehmen** macht es wie das Formular, **Verwerfen**
+  löscht ihn. Die Navigation zeigt, wie viele Vorschläge offen sind. Ein lokales Modell ist der
+  Standard; der Befehl öffnet keinen Port und braucht kein Netz.
+- **Einrichtung: ein Konto später ändern oder schließen:** In der Liste der Konten öffnet
+  **Öffnen** eine Zeile zum Bearbeiten: Anzeigename, Institut, Art, Einlesen, Parserprofil,
+  Schwelle für die Warnung, Auszugsordner, Notiz und **Geschlossen am**. Die Kennung bleibt.
+  Ein geschlossenes Konto fällt aus jeder Auswahl, seine Buchungen bleiben; ohne Datum ist es
+  wieder offen. Ein anderer Auszugsordner verschiebt keine Dateien. Bisher legte die Einrichtung
+  ein Konto nur an; jede Änderung ging im Texteditor.
+- **Monatsabschluss: Positionen selbst anlegen und entfernen:** Unter den Ständen gibt es den
+  Bereich **Position anlegen**. Du wählst das Konto (ein Konto ohne Auszug, das noch keine
+  Position hat), die Art (Depot, Krypto, Tagesgeld oder Rentenversicherung), den Stand, den
+  Stichtag und eine Notiz. Der Stand zählt sofort in Ziele und Hochrechnung. Neben jeder
+  Position steht **entfernen**; die Rückfrage nennt den Anfang der Notiz, die mit der Position
+  samt Verlauf geht. Das Konto bleibt. Bisher ging beides nur im Texteditor.
+- **Kategorien: neue Oberkategorie, Fixkosten und Einmalig:** **Neue Oberkategorie** legt einen
+  Ast an (Einnahme oder Ausgabe); danach wählst du ihn bei **Neue Subkategorie**. An jeder
+  geöffneten Subkategorie stehen **Fixkosten** (zählt unter Fixkosten und wird über zwölf Monate
+  gemessen) und **Einmalig** (kommt nicht wieder und fällt aus der Fortschreibung). Das Handbuch
+  nannte das schon; die Seite kannte es nicht. Gilt der Wert des Asts schon, schreibt Speichern
+  nichts.
+- **Annahmen: Steuersatz und Basiszins selbst setzen:** Auf **Annahmen** gibt es zwei neue
+  Zeilen, **Steuersatz auf Kapitalerträge** und **Basiszins für die Vorabpauschale**. Beide
+  rechneten bisher mit den Startwerten, die nur im Texteditor änderbar waren. Wer Kirchensteuer
+  zahlt oder keine, trägt hier seinen Satz ein. Das Feld zeigt den Satz genau (26,375 % bleibt 26,375 %, wird nicht
+  gerundet), damit ein Speichern ohne Änderung nichts verschiebt. Der feste Satz „26,375 %“ in der
+  Hilfe der Hochrechnung und in der Beschreibung der Depot-Rendite ist weg; dort steht jetzt,
+  dass der Satz aus den Annahmen gilt.
+- **Notizen sind überall zu sehen:** Wo eine Seite einen Eintrag zeigt, steht seine Notiz dabei,
+  aufklappbar und mit dem Datum, an dem sie zuletzt geändert wurde. Das gilt für Kredite, Objekte,
+  Regeln, Annahmen, Kategorien (an der Oberkategorie) und Themenkassen; auf Ziele, Rentenquellen,
+  Konten, Verträge und den Monatsabschluss kommt das Datum neben das Feld. Eine Notiz aus der
+  Zeit vor den Notizen zeigt „ohne Datum“. Ein Speichern ohne Änderung macht sie nicht jünger.
+- **Fortschreibung: eine Seite zeigt, woraus Konten und Hochrechnung rechnen:** Auf den
+  Annahmen führt „Fortschreibung je Block“ auf eine eigene Seite (`/prognosebasis`). Dort steht
+  je Block eine Zeile, etwa Gehalt, Mieteinnahmen, Fixkosten, Verträge, Erwartete Einnahmen,
+  Objekt, Kreditraten, Zinsen und Steuer darauf und die Planzeilen der Klammern: woher der Betrag
+  kommt, was Konten im ersten Monat und die Hochrechnung im ersten vollen Jahr daraus machen,
+  und auf welcher Seite du die Quelle änderst. Nennen beide Rechnungen dieselbe Quelle, steht sie
+  einmal. Die Tabelle je Kategorie mit dem Häkchen „fortschreiben“ steht ebenfalls dort, unter
+  **Nicht fortschreiben**, ohne die Spalte Δ und ohne Erklärung je Zeile. Der Treffer-Check
+  bleibt auf den Annahmen, als eigener aufklappbarer Abschnitt. Alle Zahlen der Rechnungen sind
+  dieselben.
+- **Planung und Monatsabschluss: Hinweis auf doppelt gezählte Buchungen:** Passt eine eingelesene
+  Buchung zu einer **einmaligen** Planzeile (gleiche Kategorie, ein Betrag nahe dem geplanten, das
+  Datum im Monat der Zeile oder zwei Wochen daneben) und ist ihr nicht zugeordnet, steht an der
+  Planzeile „zählt doppelt“, mit den Buchungen und „zuordnen“. Der **Monatsabschluss** führt sie
+  als Punkt unter Planung auf. Zugeordnet verschwindet der Hinweis.
+- **Im Paket: eine Anleitung zum Mitgeben:** Neben der App liegt eine **Anleitung** als
+  HTML und als PDF zum Ausdrucken, mit den Schritten in ihrer Reihenfolge. Sie sagt auch, was zu
+  tun ist, wenn Windows die App nicht startet: bei „Der Computer wurde durch Windows geschützt“,
+  wenn der Browser die Datei nicht behält, nach dem Entpacken aus einer ZIP, bei der Intelligenten
+  App-Steuerung und wenn der Virenschutz anschlägt.
+
+**Geändert:**
+
+- **Die Seiten sprechen dieselbe Sprache wie das Glossar:** Aus „Budgettöpfen“ werden
+  **Themenkassen** (die Gruppe in der Navigation heißt jetzt so, der Reiter „Buchungen“ dort
+  **Zuordnen**), aus „Transaktionen“ **Buchungen**, aus „Immobilien“ **Objekte**, aus „Renten“
+  **Rentenquellen**, aus „Abos und Versicherungen“ **Verträge**. Auf der Planung heißen Pläne
+  **Klammern** und ihre Positionen **Planzeilen**; „Frequenz“ ist **Takt**. Der Stand eines Kontos
+  heißt überall **Stand** (nicht Saldo oder Kontostand), „Backup“ heißt **Sicherung**, die Teile
+  einer Buchung heißen **Teile**, wer an einem Vertrag mitzahlt **Mitzahler**, und die Prognosebasis
+  auf den Annahmen heißt **Fortschreibung**. Die Zahlen sind dieselben.
+- **Handbuch: neue Begriffe:** Das Handbuch spricht überall von Themenkassen, Beteiligten,
+  Buchungen, Stand, Sicherung und den übrigen Begriffen des Glossars.
+- **Verträge: Erklärung in der Seite, nicht im Editor:** Die drei Absätze im Vertragseditor
+  (Buchungen, Mitzahler, neuer Vertrag) stehen jetzt in zwei aufklappbaren Hilfen oben auf der
+  Seite. Die Beispiele in Eingabefeldern nennen keinen Anbieter und keine Bank mehr; das
+  Vorschlagsfeld bei den Regeln sagt „KI-Modell“ statt eines Namens.
+- **Verträge: das Feld heißt Notiz:** Das Feld „Warum“ am Vertrag heißt **Notiz** und zeigt neben
+  sich das Datum, wie jede Notiz. In der Datei steht dieselbe Notiz wie vorher.
+- **Entfernen sagt, dass die Notiz mitgeht:** Wer einen Kredit, ein Objekt, eine Rentenquelle,
+  ein Ziel, eine Regel, eine Themenkasse oder einen Vertrag entfernt, liest in der Rückfrage
+  den Anfang der Notiz, die mit dem Eintrag aus der Datei geht. Ohne Notiz fragt sie wie bisher.
+- **Kontokarte: Untergrenze aus einem Kredit wählen:** Statt eines Hakens bietet die Karte auf
+  **Konten** die Kredite aus der Datei zur Auswahl an („kein Kredit gewählt“ vorn). Der Haken ohne
+  Kredit schrieb nur ein „ja“, das nichts bewirkte. Bestehende Dateien mit „ja“ bleiben, wie sie
+  sind; die Karte zeigt dann „kein Kredit gewählt“.
+- **Konten: Karte neben dem Cashflow nach deiner Wahl:** Die Karte neben „Cashflow ohne …“ und die
+  graue Linie im Diagramm gehören nicht mehr fest dem Gemeinschaftskonto. Sie zeigen die Kategorie,
+  die in `forecast.yaml` unter `cashflow_ohne_objekt` → `daneben` steht (`kategorie`, `label` und
+  `soll_cents`). Wer dort nichts einträgt, sieht weder Karte noch Linie.
+- **Monatsabschluss: du wählst das Ziel der Fortschrittszeile:** Die Zeile „… heute … %,
+  hochgerechnet …“ zeigt das Ziel, das in `goals.yaml` das Merkmal `im_monatsabschluss: true`
+  trägt, mit seinem Namen. Ohne Merkmal gibt es keine Zeile; der Befehl `finctl jahre` rechnet
+  mit demselben Ziel.
+- **Planung: Treffer der Buchungssuche gefärbt:** Beim Zuordnen einer Buchung zu einer Planzeile
+  zeigt die Trefferliste Beträge wie die übrigen Listen, rot für Ausgaben und grün für Eingänge.
+  Verträge sehen aus und verhalten sich wie vorher.
+- **Umstieg: Probe schreibt nur, wenn es etwas zu sehen gibt:** `finctl umstellen --probe` legt die
+  Kopie von `config/` und den Bericht nur noch an, wenn es etwas umzustellen gibt und jede
+  Prüfung besteht. Sonst steht im Terminal, warum keine Kopie entstanden ist (nichts umzustellen,
+  oder welche Prüfung scheiterte).
+- **Umstieg: Altlast `settings` weg:** Die alte Tabelle `settings` in der Datenbank, in der ältere
+  Fassungen Untergrenzen und Notizen ablegten, gibt es in neuen Datenbanken nicht mehr. Beim
+  Umstieg hält der Vergleich mit `settings_custom.yaml` nicht mehr an, wenn sich Wert und Datei
+  nur unterscheiden, weil die Datei neuer ist (die Datei gilt, der Bericht nennt es), und eine
+  Notiz, die schon in der Datei steht, zählt nicht mehr als Fund. Eine Zeile, die du nicht
+  übernehmen willst, verwirfst du mit `finctl umstellen --tabelle-verwerfen`; der Bericht hält
+  fest, was wegfällt. Danach ist die Tabelle aus der Datenbank entfernt, SQL brauchst du dafür
+  nicht. Wer schon umgestellt hat, merkt nichts davon.
+- **Umstieg: Meldungen mit Umlauten:** Die Texte von `finctl umstellen` und seinem Bericht
+  schreiben ä, ö, ü und ß statt ae, oe, ue und ss.
+
+**Behoben:**
+
+- **Verträge: Termine am Monatsende bleiben am Monatsende:** Ein Vertrag, der am 29., 30. oder 31.
+  fällig ist, rutschte nach einem kurzen Monat dauerhaft auf den 28. und kam in der Prognose
+  Monat für Monat zu früh. Jetzt kommt er nach dem Februar wieder am 31. beziehungsweise am
+  Monatsletzten. Auch bei Quartals- und Jahresverträgen rechnet jeder Termin vom
+  eingetragenen aus. In den bisherigen Zahlen ändert sich dadurch nichts.
+- **Verträge: Tippen beim Neuzeichnen:** Wer im Vertragseditor tippt, während er sich nach einem
+  Klick neu zeichnet, verliert keinen Buchstaben mehr, und der Cursor bleibt im Feld.
+
 ## 0.5.0 – 2026-11-01
 
 **Auf einen Blick:** Diese Version ist die erste, die jemand ohne Vorkenntnisse unter Windows

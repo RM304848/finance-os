@@ -29,13 +29,9 @@ def opening_balance_cents(loan: dict) -> int:
     """Where a loan's schedule starts, in order of how well it is known.
 
     A balance read off a statement beats the original principal, because
-    everything between them has already been repaid. `opening_balance_cents`
-    is the general form; the 2026-01 name is kept for the loans that were
-    written against it.
+    everything between them has already been repaid.
     """
-    return (loan.get("opening_balance_cents")
-            or loan.get("observed_balance_2026_01_cents")
-            or loan["principal_cents"])
+    return loan.get("opening_balance_cents") or loan["principal_cents"]
 
 
 def an_szenario_gebunden(loan: dict) -> str | None:

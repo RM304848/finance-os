@@ -160,6 +160,55 @@ def save(axis: str, parent: str, leaf: str, label, *,
     yaml_schreiben(path, spec)
 
 
+#: Die Merkmale, die die Seite an einer Kategorie setzt. Wie in `load_into_db`: am Kind fuer sich,
+#: am Ast fuer alle seine Kinder; was am Kind fehlt, erbt es.
+MERKMALE = ("fix", "einmalig")
+
+
+def merkmale_setzen(parent: str, leaf: str, merkmale: dict[str, bool], *,
+                    path: Path = TAXONOMY_PATH) -> bool:
+    """Fixkosten und einmalig an einer Unterkategorie setzen. `True`, wenn die Datei sich aenderte.
+
+    Gilt am Kind schon, was gewuenscht ist (geerbt vom Ast oder eigen), bleibt die Datei, wie
+    sie ist: Speichern ohne Aenderung schreibt nichts. Ein Eintrag, der nur den Wert des Asts
+    wiederholte, faellt weg.
+    """
+    spec = (yaml_lesen(path) or {}) if path.exists() else {}
+    node = (spec.get("management") or {}).get(parent)
+    kinder = node.get("children") if isinstance(node, dict) else None
+    if not isinstance(kinder, dict) or leaf not in kinder:
+        raise ValueError(f"Keine Kategorie {parent}/{leaf}")
+    kind = kinder[leaf]
+    for merkmal in (m for m in MERKMALE if m in merkmale):
+        gewollt = bool(merkmale[merkmal])
+        geerbt = bool(node.get(merkmal, False))
+        if gewollt == bool(kind.get(merkmal, geerbt) if isinstance(kind, dict) else geerbt):
+            continue
+        if not isinstance(kind, dict):
+            kind = kinder[leaf] = {"name": kind}
+        if gewollt == geerbt:
+            kind.pop(merkmal, None)
+        else:
+            kind[merkmal] = gewollt
+    if isinstance(kind, dict) and set(kind) == {"name"}:
+        kinder[leaf] = kind["name"]
+    return yaml_schreiben(path, spec)
+
+
+def oberkategorie_anlegen(kennung: str, name: str, art: str, *,
+                          path: Path = TAXONOMY_PATH) -> None:
+    """Eine neue Oberkategorie ohne Kinder; `art` ist `income` oder `expense`."""
+    _notizen.kennung_pruefen(kennung, "Kategorie")
+    if art not in ("income", "expense"):
+        raise ValueError("Art: Einnahme oder Ausgabe")
+    spec = (yaml_lesen(path) or {}) if path.exists() else {}
+    baum = spec.setdefault("management", {})
+    if kennung in baum:
+        raise ValueError(f"{kennung} gibt es schon")
+    baum[kennung] = {"name": name, "kind": art, "children": {}}
+    yaml_schreiben(path, spec)
+
+
 def add_migration(old: str, new: str, path: Path = MIGRATIONS_PATH) -> None:
     """Record where a retired category's splits should move."""
     spec = {}

@@ -141,11 +141,15 @@ def _kennung_fehler(kennung: str, vergeben: set[str]) -> str | None:
     return None
 
 
-def pruefen(konto: dict, vergeben: set[str]) -> list[str]:
-    """Was an diesem Konto nicht stimmt, in Worten. Leer heisst: in Ordnung."""
+def pruefen(konto: dict, vergeben: set[str], *, neu: bool = True) -> list[str]:
+    """Was an diesem Konto nicht stimmt, in Worten. Leer heisst: in Ordnung.
+
+    Die Kennung prueft nur ein neues Konto: Ein bestehendes behaelt sie, auch wenn eine
+    fruehere Fassung sie weiter schrieb, als sie heute erlaubt ist.
+    """
     fehler = []
     kennung = str(konto.get("id") or "").strip()
-    if grund := _kennung_fehler(kennung, vergeben):
+    if neu and (grund := _kennung_fehler(kennung, vergeben)):
         fehler.append(grund)
     if not str(konto.get("display_name") or "").strip():
         fehler.append("Anzeigename fehlt")
@@ -246,3 +250,82 @@ def anlegen(conn: sqlite3.Connection, konto: dict,
     # ersten Import entsteht, laesst den Nutzer raten, wohin die Datei soll.
     auszugsordner(schlank, statements).mkdir(parents=True, exist_ok=True)
     return schlank
+
+
+#: Die Angaben, die die Seite an einem bestehenden Konto aendert, mit der Art, wie sie
+#: gelesen werden: Text, Betrag in Cent oder Tag.
+AENDERBAR = {"display_name": "text", "institution": "text", "account_type": "text",
+             "ingest_mode": "text", "parser_profile": "text", "statement_folder": "text",
+             "dispo_threshold_cents": "cents", "closed_on": "tag"}
+
+
+def _schliessen(eintrag: dict, tag: str) -> None:
+    """Den Tag, an dem das Konto geschlossen wurde, setzen oder, leer, es wieder oeffnen."""
+    eintrag.pop("active", None)
+    if tag:
+        eintrag["closed_on"] = tag
+    else:
+        eintrag.pop("closed_on", None)
+
+
+def _felder_uebernehmen(eintrag: dict, felder: dict) -> None:
+    """Was die Seite schickt, in den Eintrag; was schon so gilt, bleibt unberuehrt."""
+    for feld, art in AENDERBAR.items():
+        if feld not in felder:
+            continue
+        wert = felder[feld]
+        if feld == "closed_on":
+            # Die Seite zeigt den Tag; ohne ihn (auch bei `active: false`) bleibt es, wie es ist.
+            if str(wert or "").strip() != str(eintrag.get(feld) or "").strip():
+                _schliessen(eintrag, str(wert or "").strip())
+            continue
+        if art == "cents":
+            wert = None if wert in (None, "") else int(wert)
+        else:
+            wert = str(wert or "").strip()
+        if wert in (None, ""):
+            eintrag.pop(feld, None)
+        elif wert != eintrag.get(feld):
+            eintrag[feld] = wert
+
+
+def aendern(conn: sqlite3.Connection, kennung: str, felder: dict,
+            config_dir: Path | None = None, statements: Path | None = None) -> dict:
+    """Die Angaben eines bestehenden Kontos aendern; die Kennung bleibt.
+
+    Gilt, was die Seite schickt, schon so, schreibt sie nichts: auch nicht, wo die Datei
+    `active: false` fuehrt und die Seite kein Schliessdatum zeigt. Die Datei traegt die
+    Entscheidung, die Tabelle wird daraus nachgefuehrt, damit die Anzeige sofort stimmt.
+    `felder` darf `notiz` tragen. Gibt den Eintrag zurueck, wie er jetzt in der Datei steht.
+    """
+    config_dir = config_dir or CONFIG_DIR
+    pfad = config_dir / DATEI
+    spec = _yaml(pfad)
+    eintrag = next((k for k in spec.get("accounts") or []
+                    if isinstance(k, dict) and str(k.get("id")) == kennung), None)
+    if eintrag is None:
+        raise ValueError(f"Kein Konto „{kennung}“")
+    vorher = {**eintrag}
+    _felder_uebernehmen(eintrag, felder)
+    if "closed_on" in eintrag and _tag_text(eintrag["closed_on"]) is None:
+        raise ValueError("Geschlossen am: JJJJ-MM-TT, oder leer")
+    if fehler := pruefen(eintrag, set(), neu=False):
+        raise ValueError("; ".join(fehler))
+    if "notiz" in felder:
+        _notizen.setzen(eintrag, _notizen.eingabe(felder["notiz"]))
+    if eintrag == vorher:
+        return eintrag
+    yaml_schreiben(pfad, spec)
+    in_db(conn, eintrag)
+    conn.commit()
+    auszugsordner(eintrag, statements).mkdir(parents=True, exist_ok=True)
+    return eintrag
+
+
+def _tag_text(wert) -> str | None:
+    from datetime import date
+
+    try:
+        return date.fromisoformat(str(wert)[:10]).isoformat()
+    except ValueError:
+        return None

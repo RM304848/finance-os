@@ -643,7 +643,7 @@ def _vertraege_alt(schluessel: str):
                 continue
             for name in (*_NOTIZ_NAMEN, "warum"):
                 roh.pop(name, None)
-            aus.append({k: v for k, v in abos.normalisieren(roh).items() if k != "warum"})
+            aus.append({k: v for k, v in abos.normalisieren(roh).items() if k != "notiz"})
         return aus
 
     return alt
@@ -653,7 +653,7 @@ def _vertraege_neu(art: str):
     def neu(spec: dict) -> list[dict]:
         from finctl import abos
 
-        return [{k: v for k, v in a.items() if k not in ("warum", "art")}
+        return [{k: v for k, v in a.items() if k not in ("notiz", "art")}
                 for a in abos.aus_spec(spec, art)]
 
     return neu
@@ -755,7 +755,7 @@ def _kredite_legen(basis: dict, seite: dict, bericht: Zusammenlegung) -> dict:
                           if v and k not in aus_basis]
     bericht.ungelesen += [f"anschluss.{k} (kein Kredit dazu)" for k, v in anschluss.items()
                           if v and k not in angelegt]
-    bericht.ungelesen += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    bericht.ungelesen += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
                           if k not in _KREDIT_SEITE]
     neu["loans"] = behalten
     _bereiche_legen(neu, seite, bericht, {_n.BEREICH: zusatz})
@@ -862,7 +862,7 @@ def _objekte_legen(basis: dict, seite: dict, bericht: Zusammenlegung) -> dict:
             continue
         bericht.aus_seite.append(f"{kennung} (Objekt, in der Seite angelegt)")
         behalten.append(objekt)
-    bericht.ungelesen += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    bericht.ungelesen += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
                           if k not in ("objekte", _n.BEREICHE)]
     neu["properties"] = behalten
     _bereiche_legen(neu, seite, bericht, {_n.BEREICH: zusatz})
@@ -964,7 +964,7 @@ def _ziele_legen(basis: dict, seite: dict, bericht: Zusammenlegung) -> dict:
         bericht.aus_seite.append("reihenfolge (die auf der Seite gezogene Anordnung)")
     if bereiche is not None:
         neu[_n.BEREICHE] = bereiche
-    bericht.ungelesen += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    bericht.ungelesen += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
                           if k not in _ZIELE_SEITE]
     _bereiche_legen(neu, seite, bericht, {_n.BEREICH: zusatz})
     return neu
@@ -1195,7 +1195,7 @@ def _verpflichtungen_legen(neu: dict, seite: dict, bericht: Zusammenlegung,
     kennungen = [bestaende.kennung(e.get("name") or "") for e in behalten]
     doppelt = sorted({k for k in kennungen if kennungen.count(k) > 1})
     if doppelt:
-        raise ValueError(f"zwei Verpflichtungen heissen danach gleich: {', '.join(doppelt)}")
+        raise ValueError(f"zwei Verpflichtungen heißen danach gleich: {', '.join(doppelt)}")
     neu["obligations"] = behalten
 
 
@@ -1236,12 +1236,12 @@ def _balances_legen(basis: dict, seite: dict, bericht: Zusammenlegung,
         bericht.ungelesen.append("verlauf (der Basis, den kein Leser kannte)")
     if verlauf:
         neu["verlauf"] = verlauf
-        bericht.aus_seite.append("verlauf (die abgelegten Staende je Monat)")
+        bericht.aus_seite.append("verlauf (die abgelegten Stände je Monat)")
     else:
         neu.pop("verlauf", None)
     if bereiche is not None:
         neu[_n.BEREICHE] = bereiche
-    bericht.ungelesen += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    bericht.ungelesen += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
                           if k not in _BALANCES_SEITE]
     _bereiche_legen(neu, seite, bericht, {_n.BEREICH: zusatz})
     return neu
@@ -1343,7 +1343,7 @@ def _regeln_legen(basis: dict, seite: dict, bericht: Zusammenlegung) -> dict:
     zusatz: list[str] = []
     behalten, in_datei = _regeln_der_datei(_liste(neu, "rules"), eigen, aus, zusatz, bericht)
     behalten += _regeln_der_seite(neu, eigen, in_datei, aus, zusatz, bericht)
-    bericht.ungelesen += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    bericht.ungelesen += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
                           if k not in _REGELN_SEITE]
     neu["rules"] = behalten
     if aus:
@@ -1407,7 +1407,7 @@ def _regeln_der_seite(neu: dict, eigen: dict, in_datei: set[str], aus: list[str]
             _regel_ausblenden(kennung, aus, bericht)
             continue
         if gilt:
-            bericht.aus_seite.append(f"{kennung} (Regel der Grundschicht, geaendert)")
+            bericht.aus_seite.append(f"{kennung} (Regel der Grundschicht, geändert)")
         else:
             regel = _nach_reihe(regel, _REGEL_REIHE)
             bericht.aus_seite.append(f"{kennung} (Regel, in der Seite angelegt)")
@@ -1496,7 +1496,7 @@ def _konten_legen(basis: dict, seite: dict, bericht: Zusammenlegung) -> dict:
             continue
         bericht.aus_seite.append(f"{kennung} (Konto, in der Seite angelegt)")
         behalten.append(_nach_reihe(konto, konten.FELDER))
-    bericht.ungelesen += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    bericht.ungelesen += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
                           if k not in ("accounts", _n.BEREICHE)]
     neu["accounts"] = behalten
     _bereiche_legen(neu, seite, bericht, {_n.BEREICH: zusatz})
@@ -1578,7 +1578,7 @@ def _lebensplan_legen(basis: dict, seite: dict, bericht: Zusammenlegung) -> dict
             bericht.aus_seite.append(f"{pfad} (Angabe, nur in der Seite oder gleich der Basis)")
         neu[abschnitt][schluessel] = wert
     bericht.ungelesen += [f"person.{k}" for k in eigen if k not in orte]
-    bericht.ungelesen += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    bericht.ungelesen += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
                           if k not in ("person", _n.BEREICHE)]
     # Die Notizen der Seite stehen unter den Namen der Seite; die Datei kennt die ihren.
     block = seite.get(_n.BEREICHE) if isinstance(seite.get(_n.BEREICHE), Mapping) else {}
@@ -1648,7 +1648,7 @@ def _backup_legen(basis: dict, seite: dict, bericht: Zusammenlegung) -> dict:
             bericht.aus_seite.append(f"{feld} (Angabe, nur in der Seite)")
         neu[feld] = eigen[feld]
     bericht.ungelesen += [f"backup.{k}" for k in eigen if k not in _SICHERUNG_FELDER]
-    bericht.ungelesen += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    bericht.ungelesen += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
                           if k not in ("backup", _n.BEREICHE)]
     _bereiche_legen(neu, seite, bericht, zusatz)
     return neu
@@ -1725,7 +1725,7 @@ def _einstellungen_ansicht(seite: dict) -> tuple[dict, list[str]]:
     if notizen:
         ansicht[_n.BEREICHE] = notizen
     rest = [f"{_SEITE_EINSTELLUNGEN}.{k} (Einstellung, die kein Leser kannte)" for k in unbekannt]
-    rest += [f"{k} (Schluessel der Seite, den kein Leser kannte)" for k in seite
+    rest += [f"{k} (Schlüssel der Seite, den kein Leser kannte)" for k in seite
              if k not in (_SEITE_EINSTELLUNGEN, _n.BEREICHE)]
     return ansicht, rest
 

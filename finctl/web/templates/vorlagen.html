@@ -1,0 +1,130 @@
+{% extends "base.html" %}{% block n_vorlagen %}on{% endblock %}
+{% block title %}Vorlagen{% endblock %}
+{% block body %}
+{% import "_konfig.html" as kf %}
+{% import "_reiter.html" as rt %}
+<h1>Vorlagen</h1>
+<p class="zweck">Wie stellst du einem KI-Modell deiner Wahl eine Frage zu deinen Zahlen?</p>
+{{ rt.reiter(reiter, art) }}
+
+<h2>1 — Vorlage</h2>
+<form class="suchzeile" onsubmit="vlNeu(this); return false">
+  {% if art == 'einordnen' %}
+  {% if texte %}
+  <div class="wrap" style="flex-basis:100%"><table class="detail" id="vl-texte">
+    <tr><th style="width:34px"><input type="checkbox" checked onchange="vlAlle(this)"></th>
+        <th>Text</th><th class="num" style="width:90px">Buchungen</th></tr>
+    {% for z in texte %}
+    <tr><td><input type="checkbox" class="vl-text" checked data-text="{{ z.text }}"></td>
+        <td>{{ z.text }}</td><td class="num">{{ z.anzahl }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+  {% elif art == 'monat' %}
+  <label>Monat <input id="vl-monat" value="{{ monat }}" placeholder="2026-09" style="max-width:8rem"></label>
+  {% else %}
+  <label style="flex:1">Frage
+    <textarea id="vl-frage" rows="2" style="width:100%" placeholder="Reichen die Konten, wenn …">{{ frage }}</textarea></label>
+  {% endif %}
+  <button type="submit" class="ghost">Vorlage neu erzeugen</button>
+</form>
+{% if fehler %}<div class="note">{{ fehler }}</div>{% endif %}
+<textarea id="vl-text" rows="14" readonly style="width:100%">{{ vorlage.text if vorlage }}</textarea>
+<p class="zeilen-knoepfe"><button type="button" onclick="vlKopieren(this)">Kopieren</button>
+  {% if anbindung %}
+  <button type="button" class="ghost" id="vl-hinaus-knopf" onclick="vlHinaus(this)"
+    title="Zeigt zuerst, was hinausgeht">Senden …</button>
+  {% else %}
+  <span class="klein muted">Die App sendet nichts.</span>
+  {% endif %}</p>
+{% if not anbindung %}<p class="klein"><a class="plain" href="/vorlagen/anbindung">Anbindung einrichten</a></p>{% endif %}
+{% if anbindung %}<div id="vl-hinaus" hidden></div>{% endif %}
+
+<h2>2 — Antwort einfügen</h2>
+<textarea id="vl-antwort" rows="6" style="width:100%"
+  placeholder="{{ 'Suchtext ; Kategorie' if art == 'einordnen' else 'ZUSAMMENFASSUNG: …' }}"></textarea>
+<p class="zeilen-knoepfe"><button type="button" class="ghost" onclick="vlPruefen(this)">Prüfen</button></p>
+<div id="vl-ergebnis" hidden></div>
+
+<details class="hilfe">
+  <summary>Was in der Vorlage steht</summary>
+  <p>Begriffe, Lage und Frage, ohne Nummern und ohne Text aus Auszügen.</p>
+  <p>Gegenparteien stehen nur beim Einordnen, bereinigt und abwählbar.</p>
+  <p>Eine Antwort ist ein Vorschlag, nichts wird ohne dein Anhaken übernommen.</p>
+  <p>Übernehmen lässt sich nur beim Einordnen, als gewöhnliche Regel.</p>
+</details>
+
+<script>
+const VL_ART = {{ art|tojson }};
+function vlAlle(kasten){ document.querySelectorAll('.vl-text').forEach(k => { k.checked = kasten.checked; }); }
+async function vlSenden(url, body){
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                              body: JSON.stringify(body)});
+  return [r.ok, await r.json()];
+}
+function vlKontext(){
+  const wert = id => { const f = document.getElementById(id); return f ? f.value : ''; };
+  return {art: VL_ART, monat: wert('vl-monat'), frage: wert('vl-frage'),
+          texte: VL_ART === 'einordnen'
+            ? [...document.querySelectorAll('.vl-text:checked')].map(k => k.dataset.text) : null};
+}
+async function vlNeu(formular){
+  const knopf = formular.querySelector('button');
+  const [ok, j] = await vlSenden('/api/vorlagen/vorlage', vlKontext());
+  if (!ok){ meldenNeben(knopf, j.error, true); return; }
+  document.getElementById('vl-text').value = j.text;
+  meldenNeben(knopf, 'neu erzeugt');
+}
+async function vlKopieren(knopf){
+  const feld = document.getElementById('vl-text');
+  try { await navigator.clipboard.writeText(feld.value); meldenNeben(knopf, 'kopiert — jetzt ins Modell einfügen'); }
+  catch (e) { feld.select(); meldenNeben(knopf, 'markiert — mit Cmd/Strg+C kopieren'); }
+}
+async function vlPruefen(knopf){
+  const [ok, j] = await vlSenden('/api/vorlagen/pruefen',
+                                 {...vlKontext(), antwort: document.getElementById('vl-antwort').value});
+  const ziel = document.getElementById('vl-ergebnis');
+  if (!ok){ ziel.hidden = true; meldenNeben(knopf, j.error, true); return; }
+  ziel.innerHTML = j.html; ziel.hidden = false;
+  meldenNeben(knopf, 'geprüft — als Vorschlag, nichts übernommen');
+}
+{% if anbindung %}
+async function vlHinaus(knopf){
+  const [ok, j] = await vlSenden('/api/vorlagen/hinaus', vlKontext());
+  const ziel = document.getElementById('vl-hinaus');
+  if (!ok){ ziel.hidden = true; meldenNeben(knopf, j.error, true); return; }
+  ziel.innerHTML = j.html; ziel.hidden = false;
+}
+function vlHinausZu(){
+  const ziel = document.getElementById('vl-hinaus');
+  ziel.hidden = true; ziel.innerHTML = '';
+}
+async function vlAbsenden(knopf){
+  // Das Stichwort gilt fuer dieses eine Senden: danach braucht es einen neuen Blick auf den Text.
+  const stichwort = knopf.dataset.stichwort;
+  const haupt = document.getElementById('vl-hinaus-knopf');
+  knopf.disabled = true;
+  vlHinausZu();
+  meldenNeben(haupt, 'gesendet — wartet auf die Antwort …');
+  const [ok, j] = await vlSenden('/api/vorlagen/senden', {stichwort});
+  if (!ok){ meldenNeben(haupt, j.error, true); return; }
+  document.getElementById('vl-antwort').value = j.antwort;
+  await vlPruefen(haupt);
+}
+{% endif %}
+async function vlUebernehmen(knopf){
+  const zeilen = [...document.querySelectorAll('.vl-nehmen:checked')]
+    .map(k => ({text: k.dataset.text, kategorie: k.dataset.kategorie}));
+  if (!zeilen.length){ meldenNeben(knopf, 'nichts angehakt', true); return; }
+  const [ok, j] = await vlSenden('/api/regeln/vorschlaege/uebernehmen', {zeilen});
+  if (!ok){ meldenNeben(knopf, j.error, true); return; }
+  meldenNeben(knopf, `${j.ids.length} Regeln angelegt — ${j.queue} noch offen`);
+}
+</script>
+
+{{ kf.fuss([
+  ('config/rules.yaml', 'Die Regeln, die aus einem angehakten Vorschlag entstehen.'),
+  ('config/anbindung.yaml', 'Wohin Senden geht, wenn eine Anbindung eingetragen ist.'),
+  ('finctl/web/templates/vorlagen.html', 'Die Texte dieser Seite.'),
+], handbuch='vorlagen') }}
+{% endblock %}

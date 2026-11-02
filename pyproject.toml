@@ -45,7 +45,7 @@ include = ["finctl*"]
 # abgestuerzt -- ohne dass hier etwas rot geworden waere.
 # `tests/test_paket.py` baut ein Rad und zaehlt nach.
 [tool.setuptools.package-data]
-"finctl" = ["HANDBUCH.md"]
+"finctl" = ["HANDBUCH.md", "CONTEXT.md"]
 "finctl.ledger" = ["*.sql"]
 "finctl.web" = ["templates/*.html"]
 "finctl.vorgaben" = ["*.yaml"]

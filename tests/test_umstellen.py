@@ -691,7 +691,7 @@ def test_the_probe_leaves_the_data_folder_untouched_and_writes_a_converted_copy(
 @pytest.mark.parametrize("wo", ["config", "."])
 def test_the_probe_folder_must_lie_outside_the_data_folder(tmp_path, wo):
     wurzel = _datenordner(tmp_path)
-    with pytest.raises(ValueError, match="ausserhalb"):
+    with pytest.raises(ValueError, match="außerhalb"):
         umstellen.probieren(wurzel, wurzel / wo)
     assert not (wurzel / "umstellung_2026-10-08.md").exists()
 
@@ -718,13 +718,52 @@ def test_the_command_reports_and_the_probe_flag_writes_nothing_in_the_data_folde
     assert lauf.exit_code == 0 and "Nichts umzustellen" in lauf.output
 
 
+def test_the_probe_writes_no_copy_when_there_is_nothing_to_convert(tmp_path, monkeypatch):
+    from finctl import cli
+
+    wurzel = _datenordner(tmp_path)
+    umstellen.ausfuehren(wurzel, heute=date(2026, 10, 8))
+    monkeypatch.setattr(cli, "CONFIG_DIR", wurzel / "config")
+    vorher = _pruefsumme(wurzel)
+    probe = tmp_path / "Probe"
+    _, bericht = umstellen.probieren(wurzel, probe, heute=date(2026, 10, 9))
+    assert bericht is None and not probe.exists()
+    lauf = CliRunner().invoke(cli.app, ["umstellen", "--probe", str(probe)])
+    assert lauf.exit_code == 0, lauf.output
+    assert "Nichts umzustellen" in lauf.output and "keine Kopie geschrieben" in lauf.output
+    assert not probe.exists() and _pruefsumme(wurzel) == vorher
+
+
+def test_the_probe_writes_no_copy_when_a_check_fails(tmp_path, monkeypatch):
+    from finctl import cli
+
+    wurzel = _datenordner(tmp_path)
+    echt = umstellen.anwenden
+
+    def verlustreich(daten, geruest, spec, stuecke):
+        neu, umbenannt = echt(daten, geruest, spec, stuecke)
+        neu.pop("notizen", None)           # eine Notiz geht verloren: die Pruefung scheitert
+        return neu, umbenannt
+
+    monkeypatch.setattr(umstellen, "anwenden", verlustreich)
+    monkeypatch.setattr(cli, "CONFIG_DIR", wurzel / "config")
+    vorher = _pruefsumme(wurzel)
+    probe = tmp_path / "Probe"
+    plan, bericht = umstellen.probieren(wurzel, probe, heute=date(2026, 10, 8))
+    assert plan.fehler and bericht is None and not probe.exists()
+    lauf = CliRunner().invoke(cli.app, ["umstellen", "--probe", str(probe)])
+    assert lauf.exit_code == 1, lauf.output
+    assert "keine Kopie geschrieben" in lauf.output
+    assert not probe.exists() and _pruefsumme(wurzel) == vorher
+
+
 def test_the_command_refuses_a_probe_folder_inside_the_data_folder(tmp_path, monkeypatch):
     from finctl import cli
 
     wurzel = _datenordner(tmp_path)
     monkeypatch.setattr(cli, "CONFIG_DIR", wurzel / "config")
     lauf = CliRunner().invoke(cli.app, ["umstellen", "--probe", str(wurzel / "probe")])
-    assert lauf.exit_code == 1 and "ausserhalb" in lauf.output
+    assert lauf.exit_code == 1 and "außerhalb" in lauf.output
     assert not (wurzel / "probe").exists()
 
 

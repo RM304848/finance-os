@@ -575,6 +575,17 @@ def aus_spec(spec: dict) -> dict:
     return _notgroschen_vorgabe(out)
 
 
+def monatsabschluss_ziel(goals: dict) -> dict | None:
+    """Das Ziel, das der Haushalt im Monatsabschluss sehen will: das erste mit
+    `im_monatsabschluss: true` in `goals.yaml`.
+
+    Ohne das Merkmal gibt es keines. Das erste Ziel der Liste waere eine stille Wahl: Der
+    Monatsabschluss zeigte als Fortschritt, was der Haushalt nie so gemeint hat, und eine
+    fehlende Zeile sagt ehrlicher, dass noch keine gewaehlt ist."""
+    return next((g for g in goals.get("ziele") or []
+                 if isinstance(g, dict) and g.get("im_monatsabschluss") is True), None)
+
+
 #: Der Notgroschen und seine Grenze stehen in `notgroschen`: Die Prognose braucht sie fuer die
 #: Untergrenze eines Kontos und darf dieses Modul nicht importieren.
 NOTGROSCHEN_MONATE = _ng.NOTGROSCHEN_MONATE

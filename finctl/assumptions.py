@@ -54,6 +54,8 @@ UEBERSCHREIBBAR: dict[str, tuple[str, ...]] = {
     "rendite_depot_pa": ("kapital", "rendite_depot_pa"),
     "sparerpauschbetrag_cents": ("kapital", "sparerpauschbetrag_cents"),
     "kostenschwelle_pa": ("kapital", "kostenschwelle_pa"),
+    "steuersatz_kapital": ("kapital", "vorabpauschale", "steuersatz"),
+    "basiszins_pa": ("kapital", "vorabpauschale", "basiszins_pa"),
     "gehalt_steigerung_pa": ("erwerbseinkommen", "gehalt_steigerung_pa"),
     "salary_floor_cents": ("erwerbseinkommen", "netto_floor_monatlich_cents"),
     "teilzeit_anteil": ("erwerbseinkommen", "teilzeit_anteil"),

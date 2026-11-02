@@ -48,9 +48,9 @@ def _diagramm_ohne_objekt(ob: dict):
     return _dg.saeulen(
         f"Cashflow ohne {ob['label']}", [m.monat for m in monate], "Cashflow", balken,
         legende=legende, grenzen=[_dg.Grenze("Ziel", ziel, "--ink")] if ziel else [],
-        zusatz=[_dg.Linie("Gemeinschaftskonto", "--muted",
-                          [m.gemeinschaftskonto_cents for m in monate])]
-        if any(m.gemeinschaftskonto_cents for m in monate) else [],
+        zusatz=[_dg.Linie(ob["daneben"]["label"], "--muted",
+                          [m.daneben_cents for m in monate])]
+        if ob["daneben"] and any(m.daneben_cents for m in monate) else [],
         untertitel="je Monat, in €")
 
 
@@ -116,6 +116,13 @@ def _verlauf(views: list[dict], konto: str) -> tuple[str, object]:
     return konto, _diagramm_konto(next(v for v in views if v["id"] == konto))
 
 
+def _lade_kredite() -> list[dict]:
+    """Die Kredite aus `loans.yaml`: Auswahl der Untergrenze aus einem Kredit."""
+    from finctl.realestate.loan import lade_kredite
+
+    return [k for k in lade_kredite(CONFIG_DIR) if k.get("id")]
+
+
 @router.get("/konten", response_class=HTMLResponse)
 # 12 als Literal, weil `ops` hier bewusst erst in den Funktionen importiert
 # wird. Die Begruendung fuer die beiden Horizonte steht bei ops.HORIZON_LONG.
@@ -157,6 +164,7 @@ def konten(request: Request, months: int = 12, konto: str = ""):
         rolle = dict((regeln.get("account_roles") or {}).get(v["id"]) or {})
         rolle["budget_cents"] = (regeln.get("account_budgets") or {}).get(v["id"])
         v["regel"] = rolle
+    kredit_optionen = [(str(k["id"]), str(k.get("name") or k["id"])) for k in _lade_kredite()]
     rollen_namen = ["operating", "consumption", "budget", "servicing", "savings",
                     "durchlaufend"]
 
@@ -197,6 +205,7 @@ def konten(request: Request, months: int = 12, konto: str = ""):
         "ohne_objekt": ohne_objekt,
         "policen": policen_im_notfall(),
         "rollen_namen": rollen_namen, "rollen_text": ROLLEN_TEXT,
+        "kredit_optionen": kredit_optionen,
         "views": views, "konten_daten": konten_daten, "gemessen_bis": gemessen_bis,
         "konto": konto, "verlauf": verlauf,
         "konto_optionen": [(ZUSAMMEN, "Giro + Tagesgeld zusammen")]
@@ -334,12 +343,25 @@ async def api_konto(account_id: str, request: Request):
             felder[feld] = None if wert in (None, "") else int(wert)
         elif art == "schalter":
             felder[feld] = None if wert is None else bool(wert)
+        elif art == "kredit":
+            # Die Kennung eines Kredits; `True` kommt nur von einem alten Aufruf (kein Kredit).
+            felder[feld] = wert if wert is True else (str(wert).strip()[:FELD_MAX] or None
+                                                      if isinstance(wert, str) else None)
         else:
             text = _notizen.eingabe(wert) if feld == "note" else str(wert).strip()[:FELD_MAX]
             felder[feld] = text or None
     if "budget_cents" in body:
         felder["budget_cents"] = (None if body["budget_cents"] in (None, "")
                                   else int(body["budget_cents"]))
+    # Ein Kredit, der in loans.yaml nicht steht, ist keine Untergrenze. Die Kennung, die schon
+    # an der Regel steht, darf bleiben: Speichern ohne Aenderung schreibt nichts, auch wenn
+    # der Kredit inzwischen fehlt.
+    gewaehlt = felder.get("floor_from_loan")
+    if isinstance(gewaehlt, str) and gewaehlt != str(
+            _kr.wirksam()["account_roles"].get(account_id, {}).get("floor_from_loan")) \
+            and gewaehlt not in {str(k.get("id")) for k in _lade_kredite()}:
+        return JSONResponse({"error": f"Kein Kredit „{gewaehlt}“ in loans.yaml"},
+                            status_code=400)
     # Die Karte schickt die Untergrenze, die sie zeigt. Zeigt sie die Vorgabe (die Schwelle
     # des Kontos), weil die Datei keine nennt, ist das Speichern ohne Aenderung kein Anlass,
     # sie einzutragen.
@@ -379,6 +401,27 @@ async def api_konto_neu(request: Request):
     return {"ok": True, "konto": angelegt,
             "ordner": str(_kn.auszugsordner(angelegt)),
             "ohne_backup": _kn.eigener_pfad(angelegt)}
+
+
+@router.post("/api/konto-stammdaten/{account_id}")
+async def api_konto_stammdaten(account_id: str, request: Request):
+    """Die Angaben eines bestehenden Kontos aendern: Namen, Einlesen, Schwelle, Schliessen, Notiz.
+
+    Die Kennung bleibt. Bisher legte die Einrichtung ein Konto an und liess es danach in
+    Ruhe; ein Tippfehler im Namen oder ein gekuendigtes Konto ging nur im Texteditor.
+    """
+    body = lies_texte(await request.json(), {"dispo_threshold_cents": "betrag"})
+    felder = {k: body[k] for k in (*_kn.AENDERBAR, "notiz") if k in body}
+    c = conn()
+    try:
+        try:
+            eintrag = _kn.aendern(c, account_id, felder)
+        except ValueError as fehler:
+            return JSONResponse({"error": str(fehler)}, status_code=400)
+    finally:
+        c.close()
+    return {"ok": True, "konto": eintrag, "ordner": str(_kn.auszugsordner(eintrag)),
+            "ohne_backup": _kn.eigener_pfad(eintrag)}
 
 
 #: Die Rollen heissen in accounts- und forecast-Konfiguration englisch; auf der
@@ -565,8 +608,8 @@ async def api_bestand(request: Request):
         # Gesperrt ist der WERT, nicht die Notiz: was ein Konto wert ist, sagt der
         # Auszug; was von dem Geld jemand anderem gehoert, sagt nur der Besitzer.
         if key in geparst and not ohne_saldo and ("cents" in body or body.get("as_of")):
-            return JSONResponse({"error": f"Wert und Stichtag von {key} kommen aus dem "
-                                          "Kontoauszug"}, status_code=400)
+            return JSONResponse({"error": f"Stand und Stichtag von {key} kommen aus dem "
+                                          "Auszug"}, status_code=400)
         vorher = _best.zusammenfuehren(c, spec)
         alt = next((z for z in vorher["balances"] if _best.schluessel(z) == key), None)
         if not _bestand_aendern(eintrag, body):
@@ -591,6 +634,56 @@ async def api_bestand(request: Request):
         finally:
             c.close()
     return {"ok": True, "count": len(spec.get("balances") or [])}
+
+
+@router.post("/api/bestand-neu")
+async def api_bestand_neu(request: Request):
+    """Eine Position anlegen: ein Depot, Krypto, Tagesgeld oder eine Rentenversicherung.
+
+    Sie haengt an einem Konto ohne Auszug und beginnt mit einem Stand. Ohne diesen Weg ging
+    eine Position nur im Texteditor: `/api/bestand` aendert nur, was die Datei schon traegt.
+    """
+    from finctl import bestaende as _best
+
+    body = lies_texte(await request.json(), {"cents": "betrag"})
+    spec = _best.lesen(CONFIG_DIR / _best.DATEI)
+    c = conn()
+    try:
+        vorher = _best.zusammenfuehren(c, spec)
+        try:
+            key = _best.position_anlegen(c, spec, body)
+            nachher = _best.zusammenfuehren(c, spec)
+        except ValueError as fehler:
+            return JSONResponse({"error": str(fehler)}, status_code=400)
+        _best.verlauf_fortschreiben(spec, vorher, nachher, key, _dtm.date.today())
+        yaml_schreiben(CONFIG_DIR / _best.DATEI, spec)
+        # Der Stand gilt sofort, nicht erst beim naechsten `finctl init`.
+        _best.spiegeln(c, spec)
+        c.commit()
+    finally:
+        c.close()
+    return {"ok": True, "key": key}
+
+
+@router.post("/api/bestand-entfernen")
+async def api_bestand_entfernen(request: Request):
+    """Eine Position samt Notiz und Verlauf aus `balances.yaml` nehmen. Das Konto bleibt."""
+    from finctl import bestaende as _best
+
+    body = await request.json()
+    spec = _best.lesen(CONFIG_DIR / _best.DATEI)
+    c = conn()
+    try:
+        try:
+            _best.position_entfernen(c, spec, str(body.get("key") or "").strip())
+        except ValueError as fehler:
+            return JSONResponse({"error": str(fehler)}, status_code=400)
+        yaml_schreiben(CONFIG_DIR / _best.DATEI, spec)
+        _best.spiegeln(c, spec)
+        c.commit()
+    finally:
+        c.close()
+    return {"ok": True}
 
 
 @router.post("/api/verpflichtung")

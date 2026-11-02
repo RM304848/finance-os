@@ -5,8 +5,9 @@ Der Ablauf geht ueber die Zwischenablage, und jeder Schritt liegt beim Nutzer:
 1. `offene_texte` sammelt die Gegenparteien der offenen Buchungen, bereinigt
    um alles, was eine Nummer ist (IBAN, Betraege, Referenzen). Auf der Seite waehlt
    man ab, was nicht hinaus soll.
-2. `prompt` baut daraus einen festen Auftrag samt der erlaubten Kategorien.
-   Er wird kopiert und in Claude eingefuegt -- die App schickt nichts.
+2. `lage` und `FRAGE` sind die beiden Teile des Auftrags; `web/vorlagen.py`
+   setzt die Begriffe davor. Er wird kopiert und in ein Modell eingefuegt --
+   die App schickt nichts.
 3. Die Antwort kommt als Tabelle `Suchtext ; Kategorie` zurueck.
    `antwort_lesen` nimmt sie tolerant auseinander, `pruefen` rechnet gegen
    das Hauptbuch, was jede Zeile faenge und wo sie einer Zuordnung
@@ -55,25 +56,27 @@ def offene_texte(conn: sqlite3.Connection) -> list[dict]:
             for t, n in sorted(zaehler.items(), key=lambda x: (-x[1], x[0]))]
 
 
-def prompt(kategorien: list[dict], texte: list[str], regeln_je: dict[str, int]) -> str:
-    """Der Auftrag an das Sprachmodell. Nur Kategorien und die gewaehlten Texte."""
-    zeilen = [
-        "Ordne Buchungstexte von deutschen Kontoauszügen Kategorien zu.",
-        "",
-        "Antworte NUR mit einer Tabelle, eine Zeile je Vorschlag, ohne Kopfzeile:",
-        "Suchtext ; Kategorie",
-        "",
-        "Regeln:",
-        "- Suchtext ist ein kurzer, eindeutiger Teil des Buchungstexts, der auch",
-        "  künftige Buchungen desselben Empfängers trifft (z. B. der Firmenname).",
-        "- Kategorie ist GENAU eine Kennung aus der Liste unten, sonst nichts.",
-        "- Bist du unsicher, lass die Zeile weg. Keine Erklärungen.",
-        "",
-        "Kategorien (Kennung – Name – vorhandene Regeln):",
-    ]
+#: Was das Modell tun soll und in welcher Form es antwortet; `antwort_lesen`
+#: liest genau diese Form.
+FRAGE = [
+    "Ordne Buchungstexte von deutschen Kontoauszügen Kategorien zu.",
+    "",
+    "Antworte NUR mit einer Tabelle, eine Zeile je Vorschlag, ohne Kopfzeile:",
+    "Suchtext ; Kategorie",
+    "",
+    "Regeln:",
+    "- Suchtext ist ein kurzer, eindeutiger Teil des Buchungstexts, der auch",
+    "  künftige Buchungen derselben Gegenpartei trifft (z. B. der Firmenname).",
+    "- Kategorie ist GENAU eine Kennung aus der Liste, sonst nichts.",
+    "- Bist du unsicher, lass die Zeile weg. Keine Erklärungen.",
+]
+
+
+def lage(kategorien: list[dict], texte: list[str], regeln_je: dict[str, int]) -> list[str]:
+    """Was das Modell sieht: die Kategorien und die gewaehlten Texte, sonst nichts."""
+    zeilen = ["Kategorien (Kennung – Name – vorhandene Regeln):"]
     zeilen += [f"{k['id']} – {k['label']} – {regeln_je.get(k['id'], 0)}" for k in kategorien]
-    zeilen += ["", "Buchungstexte:"] + [f"- {t}" for t in texte]
-    return "\n".join(zeilen)
+    return zeilen + ["", "Buchungstexte:"] + [f"- {t}" for t in texte]
 
 
 def antwort_lesen(text: str) -> list[dict]:

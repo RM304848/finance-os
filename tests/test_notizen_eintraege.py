@@ -176,15 +176,42 @@ def test_saving_an_account_rule_without_a_change_changes_nothing(config):
 
 
 def test_the_loan_behind_a_floor_survives_a_save_that_sends_the_tick_as_true(config):
-    """`floor_from_loan` heisst die Kennung des Kredits; die Karte schickt nur den Haken."""
+    """`floor_from_loan` heisst die Kennung des Kredits; ein alter Aufruf schickt nur `true`."""
     datei = _datei(config / "forecast.yaml", {
         "account_roles": {"rate": {"role": "servicing", "floor_from_loan": "k1"}}})
     vorher = datei.read_bytes()
     kontenregeln.setzen("rate", {"floor_from_loan": True, "auffuellen": True})
     assert datei.read_bytes() == vorher
-    # Ausschalten nimmt den Kredit heraus, und ein Haken ohne Kredit bleibt, wie er war.
-    kontenregeln.setzen("rate", {"floor_from_loan": False})
-    assert _gelesen(datei)["account_roles"]["rate"]["floor_from_loan"] is False
+    # Kein Kredit nimmt die Kennung heraus.
+    kontenregeln.setzen("rate", {"floor_from_loan": None})
+    assert "floor_from_loan" not in _gelesen(datei)["account_roles"]["rate"]
+
+
+def test_the_card_chooses_a_loan_and_saving_the_same_one_changes_nothing(config):
+    datei = _datei(config / "forecast.yaml", {"account_roles": {"rate": {"role": "servicing"}}})
+    kontenregeln.setzen("rate", {"floor_from_loan": "k2"})
+    assert _gelesen(datei)["account_roles"]["rate"]["floor_from_loan"] == "k2"
+    vorher = datei.read_bytes()
+    kontenregeln.setzen("rate", {"floor_from_loan": "k2"})
+    assert datei.read_bytes() == vorher
+    kontenregeln.setzen("rate", {"floor_from_loan": "k3"})
+    assert _gelesen(datei)["account_roles"]["rate"]["floor_from_loan"] == "k3"
+
+
+def test_a_true_from_an_older_version_stays_until_a_loan_is_chosen(config):
+    """Die Karte zeigt „kein Kredit gewaehlt“ und schickt nichts; der Haken bleibt unberuehrt."""
+    datei = _datei(config / "forecast.yaml", {
+        "account_roles": {"rate": {"role": "servicing", "floor_from_loan": True}}})
+    vorher = datei.read_bytes()
+    kontenregeln.setzen("rate", {"floor_from_loan": None})
+    assert datei.read_bytes() == vorher
+    kontenregeln.setzen("rate", {"floor_from_loan": "k1"})
+    assert _gelesen(datei)["account_roles"]["rate"]["floor_from_loan"] == "k1"
+    # Ein Haken ohne Kredit wird nicht mehr geschrieben.
+    datei2 = _datei(config / "forecast.yaml", {"account_roles": {"a": {"role": "operating"}}})
+    vorher2 = datei2.read_bytes()
+    kontenregeln.setzen("a", {"floor_from_loan": True})
+    assert datei2.read_bytes() == vorher2
 
 
 def test_an_account_rule_is_written_as_a_whole_entry_and_a_cleared_field_is_gone(config):
@@ -224,10 +251,10 @@ def _abodatei(config: Path) -> Path:
         _abo("neu", notiz="Neuer Text", notiz_vom="2026-02-01")], "notizen": BEREICH})
 
 
-def test_a_contract_reads_its_note_and_the_page_still_calls_it_warum(config):
+def test_a_contract_reads_its_note_and_the_page_calls_it_notiz(config):
     datei = _abodatei(config)
     a = {x["id"]: x for x in abos.laden(datei)}
-    assert (a["alt"]["warum"], a["neu"]["warum"]) == ("Alter Text", "Neuer Text")
+    assert (a["alt"]["notiz"], a["neu"]["notiz"]) == ("Alter Text", "Neuer Text")
 
 
 def test_saving_a_contract_keeps_the_note_the_date_and_the_block(config):
@@ -253,30 +280,30 @@ def test_saving_a_contract_keeps_the_note_the_date_and_the_block(config):
 def test_a_changed_contract_note_gets_todays_date(config):
     datei = _abodatei(config)
     seite = next(x for x in abos.laden(datei) if x["id"] == "alt")
-    abos.speichern({**seite, "warum": "Neu"}, datei)
+    abos.speichern({**seite, "notiz": "Neu"}, datei)
     eintrag = next(e for e in _gelesen(datei)["abos"] if e["id"] == "alt")
     assert (eintrag["notiz"], str(eintrag["notiz_vom"])) == ("Neu", HEUTE)
     assert "warum" not in eintrag
-    assert next(x for x in abos.laden(datei) if x["id"] == "alt")["warum"] == "Neu"
+    assert next(x for x in abos.laden(datei) if x["id"] == "alt")["notiz"] == "Neu"
 
 
 def test_a_multi_line_contract_note_survives_with_every_line_break(config):
     datei = _abodatei(config)
     text = "Eins.\n\nZwei, nach einer Leerzeile.\n  Drei, eingerueckt."
     seite = next(x for x in abos.laden(datei) if x["id"] == "alt")
-    abos.speichern({**seite, "warum": text}, datei)
-    assert next(x for x in abos.laden(datei) if x["id"] == "alt")["warum"] == text
+    abos.speichern({**seite, "notiz": text}, datei)
+    assert next(x for x in abos.laden(datei) if x["id"] == "alt")["notiz"] == text
     vorher = datei.read_bytes()
-    abos.speichern({**seite, "warum": text}, datei)
+    abos.speichern({**seite, "notiz": text}, datei)
     assert datei.read_bytes() == vorher
 
 
 def test_an_insurance_is_the_same_machine(config):
     datei = _datei(config / "versicherungen.yaml", {"versicherungen": [_abo("haus", notiz="Alt")]})
     seite = abos.laden(datei, "versicherung")[0]
-    abos.speichern({**seite, "warum": "Neu"}, datei, "versicherung")
+    abos.speichern({**seite, "notiz": "Neu"}, datei, "versicherung")
     assert _gelesen(datei)["versicherungen"][0]["notiz"] == "Neu"
-    assert abos.laden(datei, "versicherung")[0]["warum"] == "Neu"
+    assert abos.laden(datei, "versicherung")[0]["notiz"] == "Neu"
 
 
 # ------------------------------------------------------------------ Konto

@@ -561,7 +561,7 @@ def _base_kategorien(conn: sqlite3.Connection, f,
     frueheren Blockwert sind Cent je Kategorie und der Preis dafuer, dass der
     Rechenweg exakt aufgeht.
 
-    Was unter Prognosebasis (/annahmen) abgewaehlt ist, faellt heraus -- in den laufenden
+    Was unter Fortschreibung (/prognosebasis) abgewaehlt ist, faellt heraus -- in den laufenden
     Bloecken. Gehalt, Kredit und Einmaliges haben ihre eigene Quelle. Das
     gilt nur dort, deshalb faellt es erst hier heraus und nicht in der
     Fortschreibung, die eine Kategorie in allen Bloecken streichen wuerde.

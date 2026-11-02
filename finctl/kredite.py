@@ -158,14 +158,24 @@ def eintrag(spec: dict, kennung: str) -> dict | None:
                  if isinstance(k, dict) and str(k.get("id")) == kennung), None)
 
 
-def anlegen(felder: dict, config_dir: Path | None = None) -> dict:
-    """Einen Ratenkredit anlegen: ein neuer Eintrag hinter den vorhandenen."""
-    config_dir = config_dir or CONFIG_DIR
+def neuer_kredit(felder: dict, spec: dict) -> dict:
+    """Der Ratenkredit aus den Feldern, gegen die vorhandenen geprueft.
+
+    `ValueError` sagt, was fehlt. Die Pruefung von `anlegen` ohne das Schreiben: ein
+    Vorschlag fragt sie, bevor jemand zusagt.
+    """
     kredit = ratenkredit(felder)
-    spec = lesen(config_dir)
     fehler = pruefen(kredit, {str(k.get("id")) for k in spec.get("loans") or []})
     if fehler:
         raise ValueError("; ".join(fehler))
+    return kredit
+
+
+def anlegen(felder: dict, config_dir: Path | None = None) -> dict:
+    """Einen Ratenkredit anlegen: ein neuer Eintrag hinter den vorhandenen."""
+    config_dir = config_dir or CONFIG_DIR
+    spec = lesen(config_dir)
+    kredit = neuer_kredit(felder, spec)
 
     spec.setdefault("loans", []).append({f: v for f, v in kredit.items() if v is not None})
     speichern(spec, config_dir)

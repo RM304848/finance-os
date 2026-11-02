@@ -286,6 +286,11 @@ try {
   /* Zusammenklappbare Tabellen. das details-Element statt JavaScript: der Zustand
      gehoert ins Markup, der Browser merkt ihn sich beim Blaettern, und es
      funktioniert auch dann, wenn kein Skript laeuft. */
+  /* Die Notiz an einem Eintrag: klein und zu, das Alter steht in der Zeile. */
+  details.notiz{margin:.3rem 0;font-size:12px}
+  details.notiz>summary{cursor:pointer;color:var(--muted)}
+  details.notiz>summary:hover{color:var(--ink)}
+  details.notiz .notiztext{white-space:pre-wrap;line-height:1.35;margin:.25rem 0 0;max-width:60rem}
   details.klapp{margin:.6rem 0}
   details.klapp>summary{cursor:pointer;list-style:none;
        color:var(--muted);font-size:.95rem;font-weight:600;
@@ -387,7 +392,7 @@ try {
        Frage "wie steht es" kommt. #}
     {% if seite_an("/monatsabschluss", aktiv=an) %}<a class="{% block n_abschluss %}{% endblock %}" href="/monatsabschluss">Monatsabschluss</a>{% endif %}
     {% if seite_an("/rueckblick", aktiv=an) %}<a class="{% block n_rueckblick %}{% endblock %}" href="/rueckblick">Rückblick</a>{% endif %}
-    {% if seite_an("/transactions", aktiv=an) %}<a class="{% block n_tx %}{% endblock %}" href="/transactions">Transaktionen</a>{% endif %}
+    {% if seite_an("/transactions", aktiv=an) %}<a class="{% block n_tx %}{% endblock %}" href="/transactions">Buchungen</a>{% endif %}
     </span>
   </span>
   {% endif %}
@@ -408,7 +413,7 @@ try {
   <span class="navgruppe">
     <span class="navlabel">Objekte</span>
     <span class="navlinks">
-    {% if seite_an("/immobilien", aktiv=an) %}<a class="{% block n_immo %}{% endblock %}" href="/immobilien">Immobilien</a>{% endif %}
+    {% if seite_an("/immobilien", aktiv=an) %}<a class="{% block n_immo %}{% endblock %}" href="/immobilien">Objekte</a>{% endif %}
     {% if seite_an("/kredite", aktiv=an) %}<a class="{% block n_kredite %}{% endblock %}" href="/kredite">Kredite</a>{% endif %}
     {% if seite_an("/steuer", aktiv=an) %}<a class="{% block n_steuer %}{% endblock %}" href="/steuer">Steuer</a>{% endif %}
     </span>
@@ -419,25 +424,25 @@ try {
   <span class="navgruppe">
     <span class="navlabel">Verträge</span>
     <span class="navlinks">
-    {% if seite_an("/vertraege", aktiv=an) %}<a class="{% block n_vertraege %}{% endblock %}" href="/vertraege">Abos und Versicherungen</a>{% endif %}
+    {% if seite_an("/vertraege", aktiv=an) %}<a class="{% block n_vertraege %}{% endblock %}" href="/vertraege">Verträge</a>{% endif %}
     {% if seite_an("/energie", aktiv=an) %}<a class="{% block n_energie %}{% endblock %}" href="/energie">Energie</a>{% endif %}
-    {% if seite_an("/renten", aktiv=an) %}<a class="{% block n_renten %}{% endblock %}" href="/renten">Renten</a>{% endif %}
+    {% if seite_an("/renten", aktiv=an) %}<a class="{% block n_renten %}{% endblock %}" href="/renten">Rentenquellen</a>{% endif %}
     </span>
   </span>
   {% endif %}
 
   {% if seite_an("/projekte", "/salden", "/geteilt/buchungen", aktiv=an) %}
   <span class="navgruppe">
-    <span class="navlabel">Geteilt</span>
+    <span class="navlabel">Themenkassen</span>
     <span class="navlinks">
-    {% if seite_an("/projekte", aktiv=an) %}<a class="{% block n_projekte %}{% endblock %}" href="/projekte">Budgettöpfe</a>{% endif %}
+    {% if seite_an("/projekte", aktiv=an) %}<a class="{% block n_projekte %}{% endblock %}" href="/projekte">Themenkassen</a>{% endif %}
     {% if seite_an("/salden", aktiv=an) %}<a class="{% block n_salden %}{% endblock %}" href="/salden">Salden</a>{% endif %}
-    {% if seite_an("/geteilt/buchungen", aktiv=an) %}<a class="{% block n_geteilt_buchungen %}{% endblock %}" href="/geteilt/buchungen">Buchungen</a>{% endif %}
+    {% if seite_an("/geteilt/buchungen", aktiv=an) %}<a class="{% block n_geteilt_buchungen %}{% endblock %}" href="/geteilt/buchungen">Zuordnen</a>{% endif %}
     </span>
   </span>
   {% endif %}
 
-  {% if seite_an("/annahmen", "/kategorien", "/regeln", "/reihen", "/einrichtung", aktiv=an) %}
+  {% if seite_an("/annahmen", "/kategorien", "/regeln", "/reihen", "/vorlagen", "/vorschlaege", "/einrichtung", aktiv=an) %}
   <span class="navgruppe">
     <span class="navlabel">Stammdaten</span>
     <span class="navlinks">
@@ -445,6 +450,8 @@ try {
     {% if seite_an("/kategorien", aktiv=an) %}<a class="{% block n_kat %}{% endblock %}" href="/kategorien">Kategorien</a>{% endif %}
     {% if seite_an("/regeln", aktiv=an) %}<a class="{% block n_regeln %}{% endblock %}" href="/regeln">Regeln</a>{% endif %}
     {% if seite_an("/reihen", aktiv=an) %}<a class="{% block n_reihen %}{% endblock %}" href="/reihen">Reihen</a>{% endif %}
+    {% if seite_an("/vorlagen", aktiv=an) %}<a class="{% block n_vorlagen %}{% endblock %}" href="/vorlagen">Vorlagen</a>{% endif %}
+    {% if seite_an("/vorschlaege", aktiv=an) %}<a class="{% block n_vorschlaege %}{% endblock %}" href="/vorschlaege">Vorschläge{% if offene_vorschlaege() %} <span class="zahl">{{ offene_vorschlaege() }}</span>{% endif %}</a>{% endif %}
     {% if seite_an("/einrichtung", aktiv=an) %}<a class="{% block n_einrichtung %}{% endblock %}" href="/einrichtung">Einrichtung</a>{% endif %}
     </span>
   </span>
@@ -475,6 +482,13 @@ async function appBeenden(){
   satz.textContent = 'Dieses Fenster kann zu.';
   main.append(titel, satz);
   document.body.replaceChildren(main);
+}
+// Die Rueckfrage vor dem Entfernen. Nimmt der Knopf einen Eintrag samt Notiz aus
+// einer Datei, traegt er `data-notiz-geht` (`geht_mit` in _notiz.html), und die
+// Frage sagt, dass die Notiz mitgeht.
+function rueckfrage(frage, knopf){
+  const satz = knopf && knopf.dataset ? knopf.dataset.notizGeht : '';
+  return confirm(satz ? frage + '\n\n' + satz : frage);
 }
 // Eine Rueckmeldung steht neben dem Knopf, der sie ausgeloest hat
 // (speichern-rueckmeldung), nie in einem Dialog. Fehlt dort ein Platz, entsteht er.

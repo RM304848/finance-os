@@ -313,6 +313,76 @@ def position(spec: dict, schluessel_: str) -> dict | None:
                  if isinstance(e, dict) and schluessel(e) == schluessel_), None)
 
 
+#: Was die Seite als Art einer neuen Position anbietet. Jede zaehlt in einem Topf der
+#: Prognose (`forecast.ziele.TOPF`); eine Art ohne Topf gaelte nirgends.
+POSITIONSARTEN = {"depot": "Depot", "krypto": "Krypto", "tagesgeld": "Tagesgeld",
+                  "rentenversicherung": "Rentenversicherung"}
+
+
+def freie_konten(conn: sqlite3.Connection, spec: dict) -> list[dict]:
+    """Die Konten, fuer die eine Position angelegt werden kann.
+
+    Offen und ohne Auszug: Ein Konto, dessen Auszuege eingelesen werden, hat seinen Stand
+    schon, und eines mit Position braucht keine zweite. Jede Position haengt an einem Konto
+    (`konten-als-kennung`); wer ein Depot hat, legt zuerst das Konto an.
+    """
+    geparst = geparste_konten(conn)
+    return [{"id": r[0], "name": r[1] or r[0], "art": r[2]}
+            for r in conn.execute("SELECT id, display_name, account_type FROM accounts "
+                                  "WHERE active = 1 ORDER BY id")
+            if r[0] not in geparst and position(spec, r[0]) is None]
+
+
+def position_anlegen(conn: sqlite3.Connection, spec: dict, felder: dict) -> str:
+    """Eine neue Position hinter die vorhandenen in `spec`; die Datei schreibt der Aufrufer.
+
+    `felder`: `konto`, `art`, `cents`, `as_of`, dazu wahlweise `name` und `note`. Der Stand
+    ist Pflicht: Eine Position ohne Wert und Datum zaehlt nirgends und stuende als offen da.
+    Gibt den Schluessel der Position zurueck. Was nicht stimmt, wirft `ValueError` mit der
+    Meldung fuer die Seite.
+    """
+    konto = str(felder.get("konto") or "").strip()
+    frei = {k["id"]: k for k in freie_konten(conn, spec)}
+    if konto not in frei:
+        if konto in geparste_konten(conn):
+            raise ValueError(f"„{konto}“ liest Auszüge, sein Stand kommt von dort")
+        if position(spec, konto) is not None:
+            raise ValueError(f"Für „{konto}“ gibt es schon eine Position")
+        raise ValueError("Konto fehlt" if not konto else f"Kein offenes Konto „{konto}“")
+    art = str(felder.get("art") or "").strip()
+    if art not in POSITIONSARTEN:
+        raise ValueError("Art: " + ", ".join(POSITIONSARTEN.values()))
+    if felder.get("cents") in (None, ""):
+        raise ValueError("Stand fehlt")
+    tag = _tag(felder.get("as_of"))
+    if tag is None:
+        raise ValueError("Stichtag als JJJJ-MM-TT")
+    eintrag = {"account_id": konto,
+               "name": str(felder.get("name") or "").strip() or frei[konto]["name"],
+               "cents": int(felder["cents"]), "as_of": tag.isoformat(), "kind": art}
+    if felder.get("note"):
+        _notizen.setzen(eintrag, _notizen.eingabe(felder["note"]), alt=NOTIZ_ALT)
+    spec["balances"] = [*(spec.get("balances") or []), eintrag]
+    return konto
+
+
+def position_entfernen(conn: sqlite3.Connection, spec: dict, key: str) -> dict:
+    """Eine Position samt Verlauf aus `spec` nehmen; der Eintrag kommt zurueck (mit Notiz).
+
+    Nicht, was ein Auszug belegt: Das Konto bleibt, und sein Stand kommt weiter von dort.
+    Das Konto selbst bleibt immer stehen; es zu schliessen ist ein anderer Weg.
+    """
+    eintrag = position(spec, key)
+    if eintrag is None:
+        raise ValueError(f"Keine Position „{key}“")
+    if aus_auszug(eintrag, geparste_konten(conn)):
+        raise ValueError(f"„{key}“ liest Auszüge, die Position gehört zum Konto")
+    spec["balances"] = [e for e in spec["balances"] if e is not eintrag]
+    if isinstance(spec.get("verlauf"), dict):
+        spec["verlauf"].pop(key, None)
+    return eintrag
+
+
 def verpflichtung(spec: dict, kennung_: str) -> dict | None:
     """Der Eintrag einer Verpflichtung in der Datei -- das Objekt selbst, oder `None`."""
     return next((e for e in spec.get("obligations") or []

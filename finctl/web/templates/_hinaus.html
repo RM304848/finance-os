@@ -1,0 +1,16 @@
+{# Was beim Senden hinausgeht und wohin. Der Server liefert es als `html`; das
+   Stichwort gilt fuer genau ein Senden. #}
+<div class="wrap" id="vl-hinaus-inhalt">
+  {% if anbindung.lokal %}
+  <h3>Der Text bleibt auf diesem Rechner</h3>
+  <p>Ziel: <b>{{ anbindung.host }}</b></p>
+  {% else %}
+  <h3>Das verlässt den Rechner</h3>
+  <p>Ziel: <b>{{ anbindung.host }}</b></p>
+  {% endif %}
+  <p class="klein muted">{{ anbindung.adresse }} · Modell {{ anbindung.modell }}</p>
+  <textarea id="vl-hinaus-text" rows="12" readonly style="width:100%">{{ text }}</textarea>
+  <p class="zeilen-knoepfe">
+    <button type="button" data-stichwort="{{ stichwort }}" onclick="vlAbsenden(this)">An {{ anbindung.host }} senden</button>
+    <button type="button" class="ghost" onclick="vlHinausZu()">Abbrechen</button></p>
+</div>

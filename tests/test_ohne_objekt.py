@@ -88,10 +88,13 @@ def test_the_forecast_sums_counting_items_across_accounts():
              "budget/zuweisung": 5000, "abo/video": -1000}}]},
         {"id": "kaputt", "error": "x"},
     ]
-    [monat] = ob.vorausgerechnet(views, OBJEKT)
+    [monat] = ob.vorausgerechnet(views, OBJEKT, daneben="familie/gemeinschaftskonto")
     assert monat.monat == date(2026, 10, 1) and not monat.gemessen
     assert monat.cents == 300000 - 30000 - 1000
-    assert monat.gemeinschaftskonto_cents == -30000
+    assert monat.daneben_cents == -30000
+    # Ohne Eintrag laeuft nichts daneben mit.
+    [ohne] = ob.vorausgerechnet(views, OBJEKT)
+    assert ohne.cents == monat.cents and ohne.daneben_cents == 0
 
 
 def _ledger() -> sqlite3.Connection:
@@ -135,14 +138,28 @@ def test_measured_months_leave_out_object_purchases_investments_and_transfers(
     monkeypatch.setattr(ag, "_objekt_block",
                         lambda: ag.Block(ag.OBJEKT, "Inselhaus",
                                          f"s.property_id = '{OBJEKT}'"))
-    juli, august = ob.gemessen(_ledger(), 12)
+    juli, august = ob.gemessen(_ledger(), 12, "familie/gemeinschaftskonto")
     assert (juli.monat, august.monat) == (date(2026, 7, 1), date(2026, 8, 1))
     assert juli.cents == 500000 - 30000
-    assert juli.gemeinschaftskonto_cents == -30000
+    assert juli.daneben_cents == -30000
     assert august.cents == 500000 - 110000 - 450000
+    assert [m.daneben_cents for m in ob.gemessen(_ledger(), 12)] == [0, 0]
     k = ob.kennzahl(_ledger(), [], {"cashflow_ohne_objekt": {
-        "label": "Inselhaus", "gemeinschaftskonto_soll_cents": 30000}})
-    assert k["letzter"] == august and k["gemessen_erreicht"] == 1
-    assert k["gemeinschaftskonto_soll_cents"] == 30000
+        "label": "Inselhaus",
+        "daneben": {"kategorie": "familie/gemeinschaftskonto", "label": "Nebenkasse",
+                    "soll_cents": 30000}}})
+    assert k["letzter"].cents == august.cents and k["gemessen_erreicht"] == 1
+    assert k["daneben"] == {"kategorie": "familie/gemeinschaftskonto", "label": "Nebenkasse",
+                            "soll_cents": 30000}
+    assert k["daneben_schnitt_cents"] == -70000
     assert k["label"] == "Inselhaus"
     assert k["schnitt_prognose_cents"] is None
+
+
+def test_without_a_daneben_there_is_none():
+    """Ohne Eintrag in forecast.yaml gibt es kein Daneben: keine Karte, keine Linie."""
+    assert ob.einstellungen({})["daneben"] is None
+    assert ob.einstellungen({"cashflow_ohne_objekt": {"daneben": {"soll_cents": 5}}})[
+        "daneben"] is None
+    k = ob.kennzahl(_ledger(), [], {})
+    assert k["daneben"] is None and k["daneben_schnitt_cents"] == 0

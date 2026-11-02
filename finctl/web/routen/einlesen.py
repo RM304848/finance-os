@@ -36,7 +36,7 @@ async def _inhalt(datei: UploadFile) -> tuple[str, bytes]:
         raise ValueError("Erwartet wird eine CSV-, PDF- oder Textdatei aus dem Online-Banking.")
     daten = await datei.read(GROESSE_MAX + 1)
     if len(daten) > GROESSE_MAX:
-        raise ValueError("Die Datei ist größer als 20 MB -- das ist kein Kontoauszug.")
+        raise ValueError("Die Datei ist größer als 20 MB -- das ist kein Auszug.")
     return name, daten
 
 
@@ -83,7 +83,7 @@ async def api_erkennen(datei: UploadFile = File(...)):
                 return _fehler(f"Erkannt als {parser.profile_id}, aber nicht lesbar: {exc}")
         if pfad.suffix.lower() == ".pdf":
             return _fehler("Diesen PDF-Auszug kennt die App noch nicht. Viele Banken bieten "
-                           "im Online-Banking einen CSV-Export an -- der lässt sich zuordnen.")
+                           "im Online-Banking einen Auszug als CSV an -- der lässt sich zuordnen.")
         try:
             return {"analyse": zuordnung.analysieren("\n".join(seiten))}
         except ValueError as exc:

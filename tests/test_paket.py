@@ -110,7 +110,45 @@ def test_the_shipped_handbook_is_the_one_that_is_maintained():
         "  cp HANDBUCH.md finctl/HANDBUCH.md")
 
 
+def test_the_wheel_carries_the_glossary(rad):
+    """Ohne Glossar hat keine Vorlage Begriffe, und die Seite /vorlagen stuerzt ab."""
+    assert "finctl/CONTEXT.md" in rad
+
+
+def test_the_shipped_glossary_is_the_one_that_is_maintained():
+    """Zwei Orte, eine Datei -- wie das Handbuch."""
+    wurzel = (WURZEL / "CONTEXT.md").read_bytes()
+    paket = (WURZEL / "finctl" / "CONTEXT.md").read_bytes()
+    assert wurzel == paket, (
+        "Die Kopie im Paket ist nicht mehr die gepflegte Fassung.\n"
+        "  cp CONTEXT.md finctl/CONTEXT.md")
+
+
 def test_the_entry_point_is_declared(rad):
     """Ohne Eintragspunkt gibt es nach der Installation kein `finctl`."""
     [eintraege] = [n for n in rad if n.endswith(".dist-info/entry_points.txt")]
     assert eintraege
+
+
+def test_the_wheel_carries_the_mcp_command(rad):
+    """`finctl mcp` laeuft im Rad wie im Paket: eigene Module, keine zusaetzliche Bibliothek."""
+    for name in ("__init__", "protokoll", "werkzeuge"):
+        assert f"finctl/mcp/{name}.py" in rad
+
+
+def test_the_mcp_command_brings_no_dependency_and_the_bundle_collects_it():
+    """Das Protokoll ist JSON ueber stdio. Der Bau nimmt `finctl.mcp` ueber `collect_submodules`."""
+    import ast
+    import sys
+
+    erlaubt = set(sys.stdlib_module_names) | {"finctl", "__future__"}
+    fremd = []
+    for datei in sorted((WURZEL / "finctl" / "mcp").glob("*.py")):
+        for knoten in ast.walk(ast.parse(datei.read_text(encoding="utf-8"))):
+            module = ([a.name for a in knoten.names] if isinstance(knoten, ast.Import)
+                      else [knoten.module or ""] if isinstance(knoten, ast.ImportFrom)
+                      and not knoten.level else [])
+            fremd += [f"{datei.name}: {m}" for m in module if m.split(".")[0] not in erlaubt]
+    assert not fremd, fremd
+    spec = (WURZEL / "werkzeuge" / "paket" / "finance_os.spec").read_text(encoding="utf-8")
+    assert 'collect_submodules("finctl")' in spec

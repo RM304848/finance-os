@@ -126,11 +126,11 @@ def test_the_monthly_close_keeps_the_row_open_until_a_balance_is_entered(conn):
     heute = date(2026, 10, 5)
     zeile = next(p for p in monatsabschluss.konten(conn, heute, "2026-10") if p.id == "konto:giro")
     assert not zeile.erledigt
-    assert zeile.hinweis == "Kontostand fehlt: einmal eintragen"
+    assert zeile.hinweis == "Stand fehlt: einmal eintragen"
 
     _anker(conn, "2026-09-30", 296150)
     zeile = next(p for p in monatsabschluss.konten(conn, heute, "2026-10") if p.id == "konto:giro")
-    assert "Kontostand fehlt" not in zeile.hinweis
+    assert "Stand fehlt" not in zeile.hinweis
 
 
 # ------------------------------------------------------------- Ende zu Ende
@@ -173,17 +173,17 @@ def kachel():
         c.close()
 
 
-aus["vorher_hinweis"] = "Kontostand fehlt: einmal eintragen" in seite()
+aus["vorher_hinweis"] = "Stand fehlt: einmal eintragen" in seite()
 aus["vorher_kachel"] = kachel()["balance_cents"]
 # Auch mit nur der Basis (Modul Bestaende aus) laesst sich der Stand eintragen.
 html = cl.get("/monatsabschluss").text
-aus["feld"] = 'placeholder="Kontostand laut Online-Banking"' in html
+aus["feld"] = 'placeholder="Stand laut Online-Banking"' in html
 aus["vorher_gap"] = len(ledger.statement_chain_gaps(ledger.connect()))
 
 # Kontostand laut Online-Banking am 30.09.: 5.000 Euro. Die Seite fuehrt den Eintrag an.
 r = cl.post("/api/bestand", json={"key": "sparkasse-giro", "cents": 500000, "as_of": "2026-09-30"})
 aus["speichern"] = [r.status_code, r.json()]
-aus["nachher_hinweis"] = "Kontostand fehlt: einmal eintragen" in seite()
+aus["nachher_hinweis"] = "Stand fehlt: einmal eintragen" in seite()
 aus["nachher_kachel"] = kachel()["balance_cents"]
 c = verbindung()
 aus["staende"] = bestaende.auszugsstaende(c, ["sparkasse-giro"])["sparkasse-giro"]

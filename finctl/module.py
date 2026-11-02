@@ -67,11 +67,12 @@ KERN = ("finctl/__init__.py", "finctl/pfade.py", "finctl/dateien.py",
 APP = ("finctl/cli.py", "finctl/ops.py", "finctl/monatsabschluss.py", "finctl/fristen.py",
        "finctl/starter.py", "finctl/menueleiste.py", "finctl/nachfuehren.py",
        "finctl/umstellen.py", "finctl/umstellen_form.py", "finctl/umstellen_lagen.py",
-       "finctl/umstellen_paare.py", "finctl/web/")
+       "finctl/umstellen_paare.py", "finctl/umstellen_tabelle.py", "finctl/web/",
+       "finctl/mcp/")
 
 #: Seiten, die keinem Modul gehoeren.
-APP_SEITEN = ("/", "/monatsabschluss", "/fristen.ics", "/einrichtung", "/handbuch", "/healthz",
-              "/login")
+APP_SEITEN = ("/", "/monatsabschluss", "/fristen.ics", "/einrichtung", "/vorlagen",
+              "/vorlagen/anbindung", "/vorschlaege", "/handbuch", "/healthz", "/login")
 
 MODULE: tuple[Modul, ...] = (
     # ------------------------------------------------------------ Basis

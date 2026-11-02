@@ -161,7 +161,7 @@
 <details class="klapp">
   <summary>Rechenweg <span class="zahl">— {{ r.posten|length }} Posten</span></summary>
   <div class="wrap"><table>
-    <tr><th>Posten</th><th>Herleitung</th><th class="num">Betrag</th></tr>
+    <tr><th>Posten</th><th>Rechenweg</th><th class="num">Betrag</th></tr>
     <tr><td>Verbrauch</td><td class="muted">{{ kwh(r.kwh_bisher) }} in {{ r.tage_bisher }} Tagen, auf {{ z.tage }} Tage fortgeschrieben
       {%- if m.profil == 'heizung' %} nach Gradtagen{% endif %}{% if m.faktor != 1 %}, {{ zahl(m.faktor) }} {{ m.abrechnung }} je {{ m.einheit }}{% endif %}</td><td class="num">{{ kwh(r.kwh_erwartet) }}</td></tr>
     {% for p in r.posten %}

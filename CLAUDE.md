@@ -5,7 +5,11 @@ Start: `.venv/bin/finctl serve`, dann http://127.0.0.1:8765.
 
 ## Feste Rahmen
 
-- Alles bleibt lokal; Daten verlassen den Rechner nicht.
+- Alles bleibt lokal. Daten verlassen den Rechner nur auf ausdrückliche Wahl
+  des Haushalts (ADR 0002): Er fügt eine Vorlage selbst in ein Modell ein oder
+  bindet `finctl mcp` an ein Modell seiner Wahl. Die App selbst sendet nichts.
+  Was ein Modell schreiben will, ist ein Vorschlag, den der Haushalt in der App
+  übernimmt.
 - Parser und Betrieb laufen ohne KI. KI schreibt nur Regeln und Code.
 - Geld in Cent, negativ = raus, positiv = rein.
 - Handentscheidungen leben in `config/*_custom.yaml` und `config/overrides.yaml`,

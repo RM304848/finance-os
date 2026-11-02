@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block n_ziele %}on{% endblock %}
 {% block title %}Ziele{% endblock %}
 {% block body %}
+{% import "_notiz.html" as nz %}
 <h1>Ziele</h1>
 <p class="zweck">Wie weit du bist — heute gemessen und auf den Stichtag hochgerechnet.</p>
 
@@ -64,7 +65,7 @@
     Gemessen an <strong>{{ t.basis_text }}</strong>
     {%- if t.due and not t.projiziert_jahr %}, daher ohne Extrapolation{% endif %}.
     {%- if t.ohne_wert %}
-    <span class="neg">Ohne Wert, nicht mitgezählt: {{ t.ohne_wert|join(', ') }}</span> —
+    <span class="neg">Ohne Stand, nicht mitgezählt: {{ t.ohne_wert|join(', ') }}</span> —
     <a class="plain" href="/monatsabschluss#vermoegen">eintragen</a>.{% endif %}</div>
   {% endif %}
   {% if t.projiziert_jahr %}
@@ -131,10 +132,11 @@
   {% endif %}
   {% if not t.fest %}
   <div class="ziel-zeile">
-    <span class="muted klein">Stichtag {{ t.due or '—' }}{% if t.notiz %} · {{ t.notiz }}{% endif %}</span>
+    <span class="muted klein">Stichtag {{ t.due or '—' }}</span>
     <span class="nobr"><span class="meldung fein" id="z-meldung-{{ t.id }}"></span>
       <button class="ghost" onclick="zielOeffnen('{{ t.id }}')">Öffnen</button></span>
   </div>
+  {{ nz.zeile(t.notiz, t.notiz_vom) }}
   <div class="ziel-bearbeiten" id="z-form-{{ t.id }}" hidden>
     <div class="zeilen-form">
       <label>Name<input id="z-name-{{ t.id }}" value="{{ t.name|e }}" maxlength="80"></label>
@@ -142,7 +144,7 @@
         value="{{ t.target|betrag if t.target else '' }}"></label>
       <label>Stichtag<input id="z-datum-{{ t.id }}" value="{{ t.due or '' }}"
         placeholder="2046-10-01"></label>
-      <label>Notiz — woher kommt die Zahl?<textarea id="z-notiz-{{ t.id }}" class="notizfeld"
+      <label>Notiz — woher kommt die Zahl?{% if t.notiz %} <span class="muted fein">{{ nz.stand(t.notiz_vom) }}</span>{% endif %}<textarea id="z-notiz-{{ t.id }}" class="notizfeld"
         rows="3">{{ t.notiz|e }}</textarea></label>
     </div>
     {# Angeboten werden die ARTEN, nicht jede Position; einzelne Konten bleiben
@@ -156,7 +158,7 @@
       {% endfor %}
     </div>
     <p class="zeilen-knoepfe"><button onclick="speichern('{{ t.id }}')">Speichern</button>
-      <button class="ghost" onclick="loeschen('{{ t.id }}', '{{ t.name|e }}')">Löschen</button>
+      <button class="ghost" onclick="loeschen(this, '{{ t.id }}', '{{ t.name|e }}')"{{ nz.geht_mit(t.notiz) }}>Löschen</button>
       <span class="meldung fein" id="z-fmeldung-{{ t.id }}"></span></p>
   </div>
   {% endif %}
@@ -293,8 +295,8 @@ async function anlegen(){
   liste.addEventListener('pointerup', fertig);
   liste.addEventListener('pointercancel', fertig);
 })();
-async function loeschen(id, name){
-  if (!confirm(`Ziel „${name}“ löschen?`)) return;
+async function loeschen(knopf, id, name){
+  if (!rueckfrage(`Ziel „${name}“ löschen?`, knopf)) return;
   const r = await fetch('/api/ziel', {method:'POST',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({id: id, loeschen: true})});

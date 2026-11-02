@@ -137,6 +137,7 @@ def planung(request: Request):
         # Je Zeile: was davon im Messfenster steckt, was sie deshalb noch
         # beitraegt, und welche Buchungen zugeordnet sind oder passen.
         messungen, zuordnung, offen = {}, {}, []
+        doppelt = _sz.doppelt_je_zeile(c1, scenarios, fenster)
         for s in scenarios:
             for i, line in enumerate(s.lines):
                 zid = f"{s.id}-{i}"
@@ -152,7 +153,9 @@ def planung(request: Request):
                     # vorgeschlagen und noch ohne Wirkung.
                     "zugeordnet": _buchungen_nach_hash(c1, line.buchungen),
                     "reihe": [b for b in m["buchungen"] if b["dedup_hash"] not in eigene],
-                    "kandidaten": kandidaten}
+                    "kandidaten": kandidaten,
+                    # Einmalige Zeile und eine eingelesene Buchung dazu, die ihr fehlt.
+                    "doppelt": doppelt.get((s.id, i), [])}
                 zuordnung[zid] = {"szenario": s.id, "index": i,
                                   "hashes": list(line.buchungen),
                                   "kandidaten": [b["dedup_hash"] for b in kandidaten]}
@@ -245,7 +248,7 @@ async def api_szenario(request: Request):
     else:
         target = next((x for x in items if x.get("id") == sid), None)
         if target is None:
-            return JSONResponse({"error": "unbekanntes Szenario"}, status_code=404)
+            return JSONResponse({"error": "unbekannte Klammer"}, status_code=404)
         # Eine LEERE Verpflichtungsklammer darf weg. Sonst ist eine versehentlich
         # als Verpflichtung angelegte Klammer für immer da -- die Sperre soll
         # davor schützen, eine Schuld wegzuklicken, nicht davor, einen Vertipper
@@ -278,7 +281,7 @@ def _sperre(target: dict, body: dict) -> str | None:
     if (target.get("pflicht") and schutz
             and (target.get("zeilen") or not body.get("loeschen"))):
         return ("Verpflichtungen lassen sich nicht abschalten. Zum Entfernen zuerst "
-                "die einzelnen Positionen löschen -- eine Schuld wegzuklicken darf "
+                "die einzelnen Planzeilen löschen -- eine Verpflichtung wegzuklicken darf "
                 "kein Versehen sein.")
     # Die Teilzeit ist ein Schalter, den es immer gibt (szenarien.mit_teilzeit).
     if body.get("loeschen") and target.get("id") == "teilzeit":
@@ -370,7 +373,7 @@ def _planzeile(body: dict, label: str, freq: str, klammer: str = ""):
     from finctl.forecast import szenarien as _sz
 
     if freq not in _sz.FREQUENCIES:
-        return JSONResponse({"error": f"unbekannte Frequenz {freq}"},
+        return JSONResponse({"error": f"unbekannter Takt {freq}"},
                             status_code=400)
     art = body.get("art") or "betrag"
     if art not in _sz_kinds():
@@ -415,6 +418,25 @@ def _planzeile(body: dict, label: str, freq: str, klammer: str = ""):
 _SONDERZEILEN = {"verkauf": _verkaufszeile, "teilzeit": _teilzeitzeile}
 
 
+def neue_planzeile(body: dict, klammer: str = "") -> dict:
+    """Die gewoehnliche Zeile (Betrag, Wegfall, erwartete Einnahme) von `/api/szenario-zeile`.
+
+    Dieselbe Pruefung wie die Route; `ValueError` traegt ihre Meldung. Verkauf und
+    Teilzeit sind Sonderzeilen mit eigenen Feldern und gehoeren nicht dazu.
+    """
+    import json
+
+    label = (body.get("label") or "").strip()
+    if not label:
+        raise ValueError("Bezeichnung fehlt")
+    if (body.get("art") or "") in _SONDERZEILEN:
+        raise ValueError(f"Die Art {body['art']} legt die Seite Planung an, nicht ein Vorschlag")
+    entry = _planzeile(body, label, body.get("frequenz") or "monatlich", klammer)
+    if isinstance(entry, JSONResponse):
+        raise ValueError(json.loads(entry.body)["error"])
+    return entry
+
+
 @router.post("/api/szenario-zeile")
 async def api_szenario_zeile(request: Request):
     """Add or remove one cost line inside a scenario."""
@@ -451,7 +473,6 @@ async def api_szenario_zeile(request: Request):
         lines.pop(idx)
     else:
         label = (body.get("label") or "").strip()
-        freq = body.get("frequenz") or "monatlich"
         if not label:
             return JSONResponse({"error": "Bezeichnung fehlt"}, status_code=400)
         if (body.get("art") or "") in _SONDERZEILEN:
@@ -468,7 +489,8 @@ async def api_szenario_zeile(request: Request):
             target["zeilen"] = lines
             _write_szenarien(spec)
             return {"ok": True, "count": len(lines)}
-        entry = _planzeile(body, label, freq, str(target.get("id") or ""))
+        entry = _planzeile(body, label, body.get("frequenz") or "monatlich",
+                           str(target.get("id") or ""))
         if isinstance(entry, JSONResponse):
             return entry
         art = entry["art"]

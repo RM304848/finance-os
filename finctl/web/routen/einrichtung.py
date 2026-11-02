@@ -193,8 +193,8 @@ def eigene_angaben() -> list[dict]:
         ("Depots, Krypto, Rentenversicherungen", "/monatsabschluss#vermoegen",
          "balances.yaml", _anzahl(len(lies("balances.yaml").get("balances") or []),
                                   "Position", "Positionen")),
-        ("Renten laut Mitteilung", "/renten" if renten else "/renten#rente-neu", "renten.yaml",
-         _anzahl(len(renten), "Quelle", "Quellen")
+        ("Rentenquellen", "/renten" if renten else "/renten#rente-neu", "renten.yaml",
+         _anzahl(len(renten), "Rentenquelle", "Rentenquellen")
          + (f", {sum(1 for q in renten if not q.stand)} ohne Stand"
             if any(not q.stand for q in renten) else "")),
         ("Objekte und ihre Prognose", "/immobilien", "properties.yaml",
@@ -233,6 +233,23 @@ def konten_zeilen() -> list[dict]:
             for k in sorted(_kn.laden(), key=lambda k: str(k["id"]))]
 
 
+def konten_maske(zeilen: list[dict]) -> dict[str, dict]:
+    """Was die Maske zum Bearbeiten eines Kontos braucht, nach Kennung.
+
+    Ohne IBAN und Kontonummer: Sie stehen in keiner Maske, weil die App sie nirgends braucht.
+    """
+    from finctl.web.basis import betrag, notiz_felder
+
+    return {k["id"]: {
+        "name": k.get("display_name") or "", "institut": k.get("institution") or "",
+        "art": k.get("account_type") or "", "modus": k.get("ingest_mode") or "",
+        "profil": k.get("parser_profile") or "",
+        "schwelle": betrag(k["dispo_threshold_cents"]) if k.get("dispo_threshold_cents") else "",
+        "ordner": k.get("statement_folder") or "",
+        "zu": str(k.get("closed_on") or ""),
+        **notiz_felder(k)} for k in zeilen}
+
+
 @router.get("/einrichtung", response_class=HTMLResponse)
 def einrichtung(request: Request):
     from finctl import konten as _kn
@@ -247,7 +264,7 @@ def einrichtung(request: Request):
         "zeiger": str(_p.zeiger()),
         # Fuer `_neues_konto.html`.
         "arten": _kn.ARTEN, "modi": _kn.MODI, "profile": _kn.profile(),
-        "konten": konten_zeilen(),
+        "konten": (zeilen := konten_zeilen()), "konten_maske": konten_maske(zeilen),
         "statements_dir": str(_p.STATEMENTS_DIR),
         "module": module_zeilen(),
         "person": _person.angaben(), "kv_arten": _person.KRANKENVERSICHERUNG,

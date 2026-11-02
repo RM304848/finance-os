@@ -57,6 +57,8 @@ from finctl.web.routen import (
     renten,
     start,
     system,
+    vorlagen,
+    vorschlaege,
     ziele,
 )
 from finctl.web.routen.annahmen import _setting_pruefen  # noqa: F401
@@ -174,5 +176,5 @@ async def login(request: Request):
 # teilen sich einen Pfad, also entscheidet sie nichts.
 for _teil in (start, buchungen, konten, abos, auswertung, immobilien, kredite,
               planung, ziele, renten, annahmen, regeln, reihen, kategorien, energie, geteilt,
-              system, einrichtung, einlesen):
+              system, einrichtung, einlesen, vorlagen, vorschlaege):
     app.include_router(_teil.router)

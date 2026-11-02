@@ -18,6 +18,7 @@ from finctl.web.basis import (
     TEMPLATES,
     conn,
     lies_texte,
+    notiz_felder,
 )
 from finctl.web.verkauf import _verkaeufe_aus_plan
 
@@ -255,7 +256,7 @@ def _kreditzeile(loan: dict, entered: dict | None, sched, *, want: str,
     return {
         "folge": _anschlussrechnung(loan, sched, entered, dokumentiert,
                                     rate_pa, tilgung_heute_pct, letztes_ende),
-        "id": loan["id"], "name": loan.get("name"),
+        "id": loan["id"], "name": loan.get("name"), **notiz_felder(loan),
         # Ein Kredit, der an einer Klammer haengt, gehoert auf diese Seite
         # -- dort werden Konditionen eingetragen --, aber er muss sich vom
         # Rest unterscheiden: die drei oberen sind Vertraege, dieser ist
@@ -460,7 +461,7 @@ async def api_kredit_vorlage(request: Request):
     if not an_szenario_gebunden(loan):
         return JSONResponse(
             {"error": "Nur Vorlagen sind änderbar. Die Verträge stehen in "
-                      "loans.yaml mit ihrer Herleitung -- was dort steht, ist "
+                      "loans.yaml mit ihrer Notiz -- was dort steht, ist "
                       "aus Unterlagen belegt und keine Eingabe."},
             status_code=400)
 

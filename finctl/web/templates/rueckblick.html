@@ -34,7 +34,7 @@
   {% endfor %}
 </div>
 <div class="note klein">Beträge sind <strong>netto je Kategorie</strong>:
-  Erstattungen mindern die Position, in der sie anfallen.</div>
+  Erstattungen mindern die Kategorie, in der sie anfallen.</div>
 {% endif %}
 
 <h2>Kategorie und Subkategorie</h2>
@@ -42,7 +42,7 @@
    davor. Ein Jahr mit weniger Monaten sagt im Kopf, wie viele es hat. #}
 <div class="wrap">
 <table>
-  <tr><th>Position</th>
+  <tr><th>Kategorie</th>
     {% for j in jahre %}<th class="num" style="width:140px">{{ j }}
       {%- if monate_je_jahr[j] < 12 %}<br><span class="muted fein" style="font-weight:400">{{ monate_je_jahr[j] }} Mon.</span>{% endif %}</th>{% endfor %}</tr>
   {# Dieselbe Rechnung wie die Kacheln im Monatsabschluss, die hierher fuehren. #}
@@ -110,15 +110,15 @@
 <details class="klapp"{% if loop.first %} open{% endif %}>
   <summary>{{ g.name }}
     <span class="zahl">— {{ g.cents|euro }} · {{ (g.voll // months)|euro }} / Monat
-      · {{ g.rows|length }} Position{{ '' if g.rows|length == 1 else 'en' }}</span>
+      · {{ g.rows|length }} Kategorie{{ '' if g.rows|length == 1 else 'n' }}</span>
   </summary>
 <div class="wrap">
 <table>
-  <tr><th>Position</th><th class="num">Summe</th>
+  <tr><th>Kategorie</th><th class="num">Summe</th>
       <th class="num">Ø / Monat<br><span class="muted fein" style="font-weight:400">über {{ months }}
         {{ 'angefangene' if laufend else 'abgeschlossene' }}{{ 'n' if months == 1 }} Mon.</span></th>
       <th class="num">Buchungen</th><th>Erste</th>
-      <th title="Hat eine Position aufgehört zu buchen, ist der Vertrag womöglich beendet">Letzte</th></tr>
+      <th title="Hat eine Kategorie aufgehört zu buchen, ist der Vertrag womöglich beendet">Letzte</th></tr>
   {% for r in g.rows %}
   <tr>
     <td><a class="plain" href="/transactions?category={{ r.cat_id }}">{{ r.sub }}</a></td>
@@ -140,11 +140,11 @@
 {% endfor %}
 
 <details class="klapp">
-  <summary>Nach Vertragspartner
-    <span class="zahl">— {{ counterparties|length }} Partner</span></summary>
+  <summary>Nach Gegenpartei
+    <span class="zahl">— {{ counterparties|length }} Gegenparteien</span></summary>
 <div class="wrap">
 <table>
-  <tr><th>Partner</th><th>Kategorie</th><th class="num">Summe</th>
+  <tr><th>Gegenpartei</th><th>Kategorie</th><th class="num">Summe</th>
       <th class="num">Buchungen</th><th>Letzte</th></tr>
   {% for r in counterparties %}
   <tr>
@@ -163,7 +163,7 @@
 {% import "_konfig.html" as kf %}
 {{ kf.fuss([
   ('config/rules.yaml', 'Die Regeln, die Buchungen zuordnen.'),
-  ('config/overrides.yaml', 'Jede Entscheidung von Hand — Kategorie, Objekt, Split.'),
+  ('config/overrides.yaml', 'Jede Handentscheidung — Kategorie, Objekt, Teile.'),
   ('config/taxonomy.yaml', 'Der Kategorienbaum und das fixkosten-Flag.'),
   ('finctl/web/templates/rueckblick.html', 'Die Texte dieser Seite.'),
 ], handbuch='rueckblick') }}

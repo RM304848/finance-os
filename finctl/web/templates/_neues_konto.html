@@ -20,14 +20,14 @@
       <input id="n-id" placeholder="sparkasse-giro" maxlength="41"
              oninput="neuOrdner()"></label>
     <label>Anzeigename
-      <input id="n-name" placeholder="Sparkasse Giro"></label>
+      <input id="n-name" placeholder="Name des Kontos"></label>
     <label>Institut
-      <input id="n-institut" placeholder="Sparkasse"></label>
+      <input id="n-institut" placeholder="Name der Bank"></label>
     <label>Art
       <select id="n-art" data-no-combo>
         {% for a in arten %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
       </select></label>
-    <label title="Geparst liest Auszüge Buchung für Buchung. Nur Saldo wird allein über Umbuchungen sichtbar">Einlesen
+    <label title="Geparst liest Auszüge Buchung für Buchung. Nur der Stand wird allein über Umbuchungen sichtbar">Einlesen
       <select id="n-modus" data-no-combo onchange="neuSperren()">
         {% for m in modi %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
       </select></label>
@@ -74,7 +74,7 @@ function neuOrdner(){
   const name = roh || (nf('id').value || '').trim() || 'kennung';
   const voll = /^([\/\\~]|[A-Za-z]:[\\\/])/.test(roh);   // /…  ~…  \\Server  C:\…
   nf('ordner-text').textContent = 'Auszüge liegen in ' +
-    (voll ? roh + ' — außerhalb des Datenordners, nicht im Backup'
+    (voll ? roh + ' — außerhalb des Datenordners, nicht in der Sicherung'
           : STATEMENTS + (STATEMENTS.includes('\\') ? '\\' : '/') + name);
 }
 

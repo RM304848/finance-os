@@ -1,0 +1,52 @@
+{# Bausteine des Vertragseditors. Die Seite (abos.html) und die Schnittstelle
+   (/api/abos/editor) rendern denselben Editor aus denselben Vorlagen; ein
+   Skript setzt ihn nur ein. #}
+{% set TAKTE = [(1, 'monatlich'), (2, 'zweimonatlich'), (3, 'vierteljährlich'),
+                (4, 'viermonatlich'), (6, 'halbjährlich'), (12, 'jährlich')] %}
+
+{# Ein Betrag oder, wo es keinen gibt, ein Strich. #}
+{% macro eur(c) %}{{ c|euro if c is not none else '—' }}{% endmacro %}
+
+{# Beschriftung links, Feld rechts, Hinweis dahinter. #}
+{% macro feld(label, hinweis='') %}<label>{{ label }}</label><div>{{ caller() }}{% if hinweis %}<span class="hinweis">{{ hinweis }}</span>{% endif %}</div>{% endmacro %}
+
+{# Eine Buchung mit einem Knopf; `aktion` und `i` sagt dem Skript, welche. #}
+{% macro buchungszeile(b, aktion, i, knopf) %}
+<tr><td class="muted" style="width:95px">{{ b.booking_date }}</td>
+  <td class="muted" style="width:120px">{{ b.account_id }}</td><td>{{ b.text }}</td>
+  <td class="num" style="width:95px">{{ eur(b.amount_cents) }}</td>
+  <td style="width:110px"><button class="ghost" data-a="{{ aktion }}" data-i="{{ i }}">{{ knopf }}</button></td></tr>
+{% endmacro %}
+
+{# Eine Zahlung, die einer Person zugerechnet wird; `ziel` heißt „Zeitraum:Person“ oder „L:Person“. #}
+{% macro trefferzeile(tr, ziel) %}
+<tr class="unter"><td colspan="4">{{ tr.datum }} · {{ tr.konto }} · {{ eur(tr.cents) }}
+    <span class="muted">· {{ 'zugeordnet' if tr.art == 'zugeordnet' else 'automatisch erkannt' }}</span></td>
+  <td class="aktionen"><button class="ghost" data-a="zahlung-weg" data-i="{{ ziel }}" data-h="{{ tr.hash }}"
+    data-art="{{ tr.art }}" aria-label="{{ 'Zuordnung lösen' if tr.art == 'zugeordnet' else 'Treffer verwerfen' }}">×</button></td></tr>
+{% endmacro %}
+
+{# Ein Eingang, der als Rückzahlung zugeordnet werden kann. #}
+{% macro eingangszeile(e, ziel) %}
+<tr class="unter"><td colspan="4">{{ e.booking_date or e.datum }} · {{ e.account_id or e.konto }}
+    · {{ e.gegenpartei or e.text or '' }} · {{ eur(e.amount_cents if e.amount_cents is defined and e.amount_cents is not none else e.cents) }}
+    <span class="muted">· {{ e.kategorie or 'ohne Kategorie' }}</span></td>
+  <td class="aktionen"><button class="ghost" data-a="zahlung-zu" data-i="{{ ziel }}"
+    data-h="{{ e.dedup_hash or e.hash }}">zuordnen</button></td></tr>
+{% endmacro %}
+
+{# Suche nach einem Eingang unter der Person `ziel`; `rp` ist ihre Abrechnung, wenn es eine gibt. #}
+{% macro zahlungspanel(rp, ziel, info) %}
+{% set vor = (rp.vorschlaege if rp and rp.vorschlaege else []) %}
+{% if vor %}
+<tr class="unter"><td colspan="5" class="muted">Eingänge mit diesem Namen, die noch nirgends zählen:</td></tr>
+{% for e in vor %}{{ eingangszeile(e, ziel) }}{% endfor %}
+{% endif %}
+<tr class="unter"><td colspan="5"><form data-zsuche class="suchzeile">
+    <input data-zq data-no-combo placeholder="Eingang suchen, etwa ein Name">
+    <button type="submit">Suchen</button>
+    <button type="button" class="ghost" data-a="zahlung-zu-schliessen">schließen</button></form></td></tr>
+{% set treffer = info.zahlTreffer or [] %}
+{% if treffer %}{% for e in treffer %}{{ eingangszeile(e, ziel) }}{% endfor %}
+{% elif info.zahlGesucht %}<tr class="unter"><td colspan="5" class="muted">Kein Eingang gefunden.</td></tr>{% endif %}
+{% endmacro %}

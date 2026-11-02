@@ -1,0 +1,4 @@
+{# Abbuchungen, die einem Vertrag zugeordnet werden können: das Ergebnis der Suche. #}
+{% import "_abo_bausteine.html" as bs %}
+{% if rows %}<table>{% for b in rows %}{{ bs.buchungszeile(b, 'treffer', loop.index0, 'zuordnen') }}{% endfor %}</table>
+{% else %}<span class="muted klein">Keine Abbuchung gefunden.</span>{% endif %}

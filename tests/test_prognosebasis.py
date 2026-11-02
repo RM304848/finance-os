@@ -17,6 +17,10 @@ from finctl.forecast import prognosebasis as pb
 
 DB = Path("data/finance.db")
 
+#: Bis hierhin gilt eine Differenz je Kategorie als Rundung: /konten rundet die Monatsrate je
+#: Konto auf den Cent, die Jahresrechnung einmal auf der Summe.
+RUNDUNG_CENTS = 5
+
 
 def test_only_the_deviation_is_stored(tmp_path, monkeypatch):
     monkeypatch.setattr(pb, "CONFIG_DIR", tmp_path)
@@ -62,28 +66,12 @@ def test_an_excluded_category_is_gone_from_both_engines(monkeypatch):
 
 
 @pytest.mark.skipif(not DB.exists(), reason="no ledger present")
-def test_the_page_names_a_reason_for_every_difference():
-    from finctl.ledger.db import connect
-
-    c = connect()
-    try:
-        v = pb.vergleich(c)
-    finally:
-        c.close()
-    assert v["zeilen"]
-    for z in v["zeilen"]:
-        if z["delta"]:
-            assert z["grund"], z["kategorie"]
-    gehalt = next(z for z in v["zeilen"] if z["kategorie"] == "einkommen/gehalt")
-    assert "Untergrenze" in gehalt["grund"]
-
-
-@pytest.mark.skipif(not DB.exists(), reason="no ledger present")
 def test_the_two_columns_differ_only_by_rounding_or_by_a_kontenregel():
     """Beide Rechnungen nehmen dieselben Eingaben: Das Delta einer Zeile ist Rundung, es sei
     denn, nur das Monatsmodell kennt die Regel (`exclude_from_recurring` in forecast.yaml).
     Was ein Vertrag, eine erwartete Einnahme oder die Objektprognose ersetzt, steht in beiden
     Spalten als Posten, nicht als Messung der ersetzten Buchungen."""
+    from finctl.forecast import konten as ops
     from finctl.ledger.db import connect
 
     c = connect()
@@ -91,10 +79,12 @@ def test_the_two_columns_differ_only_by_rounding_or_by_a_kontenregel():
         v = pb.vergleich(c)
     finally:
         c.close()
-    abweichend = [(z["kategorie"], z["delta"]) for z in v["zeilen"]
-                  if abs(z["delta"]) > pb.RUNDUNG_CENTS and not z["dauerhaft"]]
+    ausgeschlossen = set(ops.forecast_config().get("exclude_from_recurring") or [])
+    abweichend = [(z["kategorie"], (z["jahr"] or 0) - (z["konten"] or 0)) for z in v["zeilen"]
+                  if abs((z["jahr"] or 0) - (z["konten"] or 0)) > RUNDUNG_CENTS
+                  and z["kategorie"] not in ausgeschlossen]
     assert not abweichend
-    assert abs(v["summe_jahr"] - v["summe_konten"]) <= pb.RUNDUNG_CENTS * len(v["zeilen"])
+    assert abs(v["summe_jahr"] - v["summe_konten"]) <= RUNDUNG_CENTS * len(v["zeilen"])
     for z in v["zeilen"]:
         if z["block"] == "objekt" and "(Objektprognose)" not in z["kategorie"]:
             assert z["konten"] is None and z["jahr"] is None, z["kategorie"]

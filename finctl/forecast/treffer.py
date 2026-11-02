@@ -233,10 +233,8 @@ def _zeitraumanteil(abo: dict, termin: date) -> int:
         return 0
     von = _ab._monat_erster(zeitraum["von"])
     bis = max(_ab._monat_erster(zeitraum["bis"]), _ab.plus_monate(von, 1))
-    # Monat fuer Monat: `abos.termine` zaehlt in einem langen Fenster nur vom letzten Termin an.
-    termine = [t for i in range(12 * 10)
-               if (monat := _ab.plus_monate(von, i)) < bis
-               for t in _vt.termine(abo, (), ab=monat, bis=ag._month_end(monat))
+    termine = [t for t in _vt.termine(abo, (), ab=von,
+                                      bis=ag._month_end(_ab.plus_monate(bis, -1)))
                if _ab.zeitraum_am(abo, t) is zeitraum]
     if not termine:
         return 0

@@ -102,7 +102,9 @@ def _testwurzel_anlegen(quelle: Path) -> Path:
         shutil.copytree(quelle / "config", wurzel / "config",
                         ignore=shutil.ignore_patterns("*.lock"))
     for eintrag in (quelle / "data").iterdir() if (quelle / "data").is_dir() else ():
-        if eintrag.name.startswith(".") or eintrag.name.startswith("referenz"):
+        # Vorschlaege einer KI sind offene Arbeit des Haushalts, kein Teil dessen, was die
+        # Tests lesen: ein liegengebliebener liesse jede Zahl ihrer Seite wackeln.
+        if eintrag.name.startswith((".", "referenz", "vorschlaege")):
             continue
         if eintrag.is_dir():
             shutil.copytree(eintrag, daten / eintrag.name, copy_function=_harter_link)

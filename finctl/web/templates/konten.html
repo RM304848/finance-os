@@ -83,13 +83,14 @@
     <div class="v {{ 'pos' if ob.schnitt_prognose_cents >= ziel else 'neg' }}">{{ ob.schnitt_prognose_cents|euro }}</div>
     {% else %}<div class="v muted">—</div>{% endif %}
     <div class="muted klein">{{ ob.prognose_erreicht }} von {{ ob.prognose_anzahl }} Monaten erreicht · Gehalt als Untergrenze</div></div>
-  {% if ob.gemeinschaftskonto_soll_cents or ob.monate|selectattr('gemeinschaftskonto_cents')|list %}
-  <div class="card"><div class="k">Gemeinschaftskonto{% if ob.letzter %} · {{ ob.letzter.monat.strftime('%Y-%m') }}{% endif %}</div>
-    {% set soll = ob.gemeinschaftskonto_soll_cents %}
+  {% set daneben = ob.daneben %}
+  {% if daneben and (daneben.soll_cents or ob.monate|selectattr('daneben_cents')|list) %}
+  <div class="card"><div class="k">{{ daneben.label }}{% if ob.letzter %} · {{ ob.letzter.monat.strftime('%Y-%m') }}{% endif %}</div>
+    {% set soll = daneben.soll_cents %}
     {% if ob.letzter %}
-    <div class="v {{ 'neg' if soll and -ob.letzter.gemeinschaftskonto_cents > soll else '' }}">{{ ob.letzter.gemeinschaftskonto_cents|euro }}</div>
+    <div class="v {{ 'neg' if soll and -ob.letzter.daneben_cents > soll else '' }}">{{ ob.letzter.daneben_cents|euro }}</div>
     {% else %}<div class="v muted">—</div>{% endif %}
-    <div class="muted klein">{% if soll %}Soll {{ (-soll)|euro }} · {% endif %}Ø <span class="{{ (ob.gemeinschaft_schnitt_cents or 0)|vz }}">{{ (ob.gemeinschaft_schnitt_cents or 0)|euro }}</span></div></div>
+    <div class="muted klein">{% if soll %}Soll {{ (-soll)|euro }} · {% endif %}Ø <span class="{{ (ob.daneben_schnitt_cents or 0)|vz }}">{{ (ob.daneben_schnitt_cents or 0)|euro }}</span></div></div>
   {% endif %}
 </div>
 {# Gezeichnet in finctl/web/diagramm.py, die Tabelle mit denselben Zahlen darunter. #}
@@ -113,7 +114,7 @@
    an der man etwas aendert. #}
 <details class="klapp"{{ ' open' if unter }}>
   <summary>{{ views|length }} Konten
-    <span class="zahl">— Rolle, Grenzen und Zweck
+    <span class="zahl">— Rolle, Grenzen und Notiz
       {%- if unter %}, {{ unter|length }} unter der eigenen Grenze{% endif %}</span>
   </summary>
 <div class="wrap">
@@ -147,14 +148,17 @@
         <select id="f-role" data-no-combo onchange="sperren()">
           {% for name in rollen_namen %}<option value="{{ name }}">{{ rollen_text.get(name, name) }}</option>{% endfor %}
         </select></label>
-      <label title="Was über dem Deckel liegt, geht am Monatsende dorthin. Nur das Betriebskonto räumt ab — nur für dessen Übertrag gibt es die Gegenbuchung">Abräumen nach
+      <label title="Was über dem Deckel liegt, geht am Monatsende dorthin. Nur das Betriebskonto räumt ab — nur für dessen Umbuchung gibt es die Gegenbuchung">Abräumen nach
         <select id="f-sweep" data-no-combo></select></label>
       <label class="schalter" title="Aus: eine Unterschreitung bleibt sichtbar, statt still gedeckt zu werden">
         <input type="checkbox" id="f-fill"> vom Betriebskonto auffüllen</label>
-      <label class="schalter" title="Die Untergrenze ist dann eine Monatsrate des Kredits">
-        <input type="checkbox" id="f-loanfloor" onchange="sperren()"> Untergrenze aus Kreditrate</label>
+      <label title="Die Untergrenze ist dann eine Monatsrate dieses Kredits">Untergrenze aus einem Kredit
+        <select id="f-loan" data-no-combo onchange="sperren()">
+          <option value="">kein Kredit gewählt</option>
+          {% for kid, kname in kredit_optionen %}<option value="{{ kid }}">{{ kname }}</option>{% endfor %}
+        </select></label>
     </div>
-    <label style="display:block;margin:.5rem 0 0">Zweck
+    <label style="display:block;margin:.5rem 0 0">Notiz <span class="muted fein" id="f-note-stand"></span>
       <textarea id="f-note" class="notizfeld" rows="3"
                 placeholder="wofür dieses Konto da ist"></textarea></label>
     <p class="zeilen-knoepfe">
@@ -320,7 +324,7 @@ const feld = n => document.getElementById('f-' + n);
 // jeden anderen Uebertrag gibt es keine Gegenbuchung. Gesperrt zeigt das
 // Abraeumziel deshalb "—": ein Wert darin rechnet nicht, Speichern loescht ihn.
 function sperren(){
-  feld('floor').disabled = feld('loanfloor').checked;
+  feld('floor').disabled = feld('loan').value !== '';
   const sweep = feld('sweep');
   sweep.disabled = feld('role').value !== 'operating';
   sweep.value = sweep.disabled ? '' : (sweep.dataset.wert || '');
@@ -344,8 +348,15 @@ function oeffne(id){
     .join('');
   feld('sweep').dataset.wert = r.sweep_to || '';
   feld('fill').checked = r.auffuellen !== false;
-  feld('loanfloor').checked = !!r.floor_from_loan;
+  // Ein `true` aus einer alten Fassung nennt keinen Kredit; eine Kennung ohne Kredit in
+  // loans.yaml bleibt auswaehlbar, damit Speichern ohne Aenderung nichts schreibt.
+  const kredit = typeof r.floor_from_loan === 'string' ? r.floor_from_loan : '';
+  if(kredit && ![...feld('loan').options].some(o => o.value === kredit)){
+    feld('loan').add(new Option(kredit + ' (kein solcher Kredit)', kredit));
+  }
+  feld('loan').value = kredit;
   feld('note').value = r.note || '';
+  feld('note-stand').textContent = r.note ? (r.notiz_vom ? 'vom ' + r.notiz_vom : 'ohne Datum') : '';
   sperren();
   meldung('');
   document.getElementById('u-' + id).after(panel);
@@ -395,7 +406,7 @@ async function regelSpeichern(){
       role: feld('role').value,
       sweep_to: feld('sweep').disabled ? undefined : feld('sweep').value,
       auffuellen: feld('fill').checked,
-      floor_from_loan: feld('loanfloor').checked,
+      floor_from_loan: feld('loan').value,
       note: feld('note').value})});
   if(res.ok){ meldung('gespeichert — neu rechnen…');
               setTimeout(() => location.reload(), 600); }
@@ -405,8 +416,8 @@ async function regelSpeichern(){
 </script>
 {% import "_konfig.html" as kf %}
 {{ kf.fuss([
-  ('config/forecast.yaml', 'Rolle, Budget und Mindestniveau je Konto — mit der Notiz, die sagt, warum.'),
-  ('config/abos.yaml', 'Abos mit Termin, die der Auszug nicht zeigt — etwa ein Zahlweg über einen Händler.'),
+  ('config/forecast.yaml', 'Rolle, Untergrenze, Deckel und Auffüllen je Konto — mit der Notiz, die sagt, warum.'),
+  ('config/abos.yaml', 'Verträge mit Termin, die der Auszug nicht zeigt — etwa ein Zahlweg über einen Händler.'),
   ('config/assumptions.yaml', 'Gehaltsuntergrenze, Inflation, Objektertrag.'),
   ('config/loans.yaml', 'Kreditraten, die abgebucht werden.'),
   ('config/szenarien.yaml', 'Eingeschaltete Pläne, die in der Vorschau mitlaufen.'),

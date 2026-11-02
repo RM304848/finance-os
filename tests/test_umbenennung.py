@@ -1,4 +1,4 @@
-"""Umbenennungsprobe: jedes Konto, jedes Objekt, jeden Kredit umbenennen --
+"""Umbenennungsprobe: jedes Konto, jedes Objekt, jeden Kredit und jedes Ziel umbenennen --
 alle Zahlen bleiben gleich.
 
 Warum. Die Neufassung (`docs/Neufassung_plan.md`) will, dass Prognose und
@@ -9,8 +9,8 @@ nachsieht, ob sich etwas bewegt: Wo der Code einen Einzelfall kennt, passt
 ihm danach eine Kennung nicht mehr.
 
 Wie. In einer Kopie von `config/` und den Auszuegen bekommt jedes Konto, jedes
-Objekt und jeder Kredit eine neue Kennung und einen neuen Anzeigenamen; Ordner der Auszuege
-heissen entsprechend. Neu gebaut wird wie bei `tests/referenz.py`, verglichen
+Objekt, jeder Kredit und jedes Ziel eine neue Kennung und einen neuen Anzeigenamen; Ordner
+der Auszuege heissen entsprechend. Neu gebaut wird wie bei `tests/referenz.py`, verglichen
 wird die ZAHLENEBENE der Seiten und eine Zusammenfassung des Hauptbuchs ohne
 Namen. Die neuen Namen enthalten keine Ziffern, damit sie keine Zahl auf einer Seite
 verschieben, und sie behalten die Reihenfolge der alten. Verglichen wird trotzdem
@@ -43,6 +43,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).parent))
 import referenz
 
+from finctl.forecast.notgroschen import PUFFER_ZIEL
 from finctl.ingest.importer import dedup_hash
 
 QUELLE = Path(os.environ["FINCTL_TEST_QUELLE"])
@@ -71,16 +72,20 @@ def _kennungen(config: Path) -> dict[str, dict[str, str]]:
     """Was umbenannt wird: je Sorte {alt: Anzeigename (oder Kennung)}.
 
     Kennungen und Anzeigenamen stehen in den Dateien der Sache (`accounts.yaml`,
-    `properties.yaml`, `loans.yaml`).
+    `properties.yaml`, `loans.yaml`, `goals.yaml`). Der Notgroschen heisst fest
+    (`PUFFER_ZIEL`): Er ist der Posten, den die Prognose kennt, und bleibt, wie er ist.
     """
-    sorten: dict[str, dict[str, str]] = {"konto": {}, "objekt": {}, "kredit": {}}
+    sorten: dict[str, dict[str, str]] = {"konto": {}, "objekt": {}, "kredit": {}, "ziel": {}}
     felder = (("konto", "accounts", ("accounts.yaml",), "display_name"),
               ("objekt", "properties", ("properties.yaml",), "name"),
-              ("kredit", "loans", ("loans.yaml",), "name"))
+              ("kredit", "loans", ("loans.yaml",), "name"),
+              ("ziel", "ziele", ("goals.yaml",), "name"))
     for sorte, wurzel, dateien, namensfeld in felder:
         for datei in dateien:
             for eintrag in _laden(config / datei).get(wurzel) or []:
                 if isinstance(eintrag, dict) and eintrag.get("id") is not None:
+                    if sorte == "ziel" and str(eintrag["id"]) == PUFFER_ZIEL:
+                        continue
                     sorten[sorte][str(eintrag["id"])] = str(eintrag.get(namensfeld) or "")
     return sorten
 
@@ -333,7 +338,7 @@ def kennungen_im_code(config: Path, wurzel: Path | None = None) -> Counter:
 
 
 def test_keine_kennung_im_code():
-    """Keine Kennung eines Kontos, Objekts oder Kredits steht als Text im Code."""
+    """Keine Kennung eines Kontos, Objekts, Kredits oder Ziels steht als Text im Code."""
     funde = kennungen_im_code(QUELLE / "config")
     neu = {d: n for d, n in funde.items() if n > BEKANNT.get(d, 0)}
     assert not neu, ("Eine Kennung aus config/ steht im Code -- dort darf nur eine Rolle "
@@ -373,7 +378,7 @@ def test_ersetzen_trifft_kennungen_und_laesst_arten_stehen():
 
 @pytest.mark.langsam
 def test_umbenennen_aendert_keine_zahl(tmp_path):
-    """Jedes Konto, Objekt und jeder Kredit bekommt einen neuen Namen: Hauptbuch
+    """Jedes Konto, Objekt, jeder Kredit und jedes Ziel bekommt einen neuen Namen: Hauptbuch
     und Seiten zeigen dieselben Zahlen."""
     tag = dt.date.today()
     alt = tmp_path / "alt"
@@ -395,5 +400,5 @@ def test_umbenennen_aendert_keine_zahl(tmp_path):
         referenz.neu_bauen(quelle2, tag, neu)
 
     funde = vergleichen(alt, neu, {**karte, **namen_abbildung(QUELLE / "config")})
-    assert not funde, ("Nach dem Umbenennen aller Konten, Objekte und Kredite:\n\n"
+    assert not funde, ("Nach dem Umbenennen aller Konten, Objekte, Kredite und Ziele:\n\n"
                        + "\n".join(funde[:40]))

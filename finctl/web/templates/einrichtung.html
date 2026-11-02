@@ -12,7 +12,7 @@ es gibt, wer plant und was die App zeigen soll.</p>
   lokal auf deinem Rechner, ohne Cloud und ohne Bankzugang.</p>
   <p>Daraus entsteht jeden Monat ein Abschluss: wohin das Geld geht, was
   Fixkosten sind und was übrig bleibt.</p>
-  <p>Und der Blick nach vorn: Kredite, Immobilien, Anschlussfinanzierungen,
+  <p>Und der Blick nach vorn: Kredite, Objekte, Anschlussfinanzierungen,
   Lebensziele, große Anschaffungen und Urlaube, Rentenlücke – durchgerechnet
   bis zum Lebensende, sodass Entscheidungen auf Zahlen beruhen statt auf Gefühl.</p>
   <p>Wie alles zusammenhängt: <a href="/handbuch">Handbuch</a>.</p>
@@ -102,7 +102,7 @@ Prognose rechnet damit – geh sie einmal auf <a href="/annahmen">Annahmen</a> d
   {# Andersherum als ein Formular: erst die Datei, dann das Konto. Wer zum
      ersten Mal hier ist, kennt seine Bank, aber kein Parserprofil. #}
   <div class="card" id="erkennen">
-    <label for="ae-datei">Auszug oder CSV-Export aus dem Online-Banking</label>
+    <label for="ae-datei">Auszug (PDF oder CSV) aus dem Online-Banking</label>
     <div class="zeile" style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:.3rem">
       <input type="file" id="ae-datei" accept=".csv,.pdf,.txt">
       <button type="button" onclick="auszugErkennen(this)">Erkennen</button>
@@ -124,7 +124,7 @@ Prognose rechnet damit – geh sie einmal auf <a href="/annahmen">Annahmen</a> d
       <summary>Was mit der Datei passiert</summary>
       <p>Zum Erkennen wird sie nur gelesen und nirgends abgelegt.</p>
       <p>Abgelegt wird sie erst im Auszugsordner des Kontos, das sie aufnimmt.</p>
-      <p>Ohne Saldo im Export prüft nur der Anschluss an den vorigen.</p>
+      <p>Ohne Stand im Auszug prüft nur der Anschluss an den vorigen.</p>
     </details>
   </div>
   {% if konten %}
@@ -135,9 +135,35 @@ Prognose rechnet damit – geh sie einmal auf <a href="/annahmen">Annahmen</a> d
         <th style="width:140px">Parserprofil</th>
         <th class="num" style="width:110px"
             title="Fällt der Tiefpunkt eines Monats darunter, warnt die Prognose">Warnen unter</th>
-        <th>Auszüge</th></tr>
+        <th>Auszüge</th><th style="width:5.5rem"></th></tr>
+    <tr id="ke-panel" class="panel" hidden><td colspan="8">
+      <p class="regel-titel"><strong id="ke-titel"></strong></p>
+      <div class="felder">
+        <label>Anzeigename<input id="ke-name"></label>
+        <label>Institut<input id="ke-institut"></label>
+        <label>Art<select id="ke-art" data-no-combo>
+          {% for a in arten %}<option value="{{ a }}">{{ a }}</option>{% endfor %}</select></label>
+        <label>Einlesen<select id="ke-modus" data-no-combo onchange="kontoSperren()">
+          {% for m in modi %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></label>
+        <label>Parserprofil<select id="ke-profil" data-no-combo>
+          <option value="">—</option>
+          {% for p in profile %}<option value="{{ p }}">{{ p }}</option>{% endfor %}</select></label>
+        <label title="Fällt der Tiefpunkt eines Monats darunter, warnt die Prognose">Warnen unter €
+          <input id="ke-schwelle" class="betrag" placeholder="0,00"></label>
+        <label title="Ordnername unter data/statements/ — leer heißt: wie die Kennung">Auszüge in
+          <input id="ke-ordner" placeholder="wie die Kennung"></label>
+        <label title="Leer: das Konto ist offen. Ein Tag nimmt es aus jeder Auswahl; die Buchungen bleiben">Geschlossen am
+          <input id="ke-zu" placeholder="2026-01-31"></label>
+        <label>Notiz <span class="muted fein" id="ke-notiz-vom"></span>
+          <textarea id="ke-notiz" class="notizfeld" rows="3"
+            placeholder="Notiz — warum ist das Konto so eingerichtet?"></textarea></label>
+      </div>
+      <p class="zeilen-knoepfe">
+        <button type="button" onclick="kontoSpeichern(this)">Speichern</button>
+        <button type="button" class="ghost" onclick="kontoZu()">Abbrechen</button></p>
+    </td></tr>
     {% for k in konten %}
-    <tr{% if not k.aktiv %} class="muted"{% endif %}>
+    <tr id="kz-{{ k.id }}"{% if not k.aktiv %} class="muted"{% endif %}>
       <td>{{ k.id }}{% if not k.aktiv %} <span class="pill">geschlossen</span>{% endif %}
         <br><span class="muted fein">{{ k.display_name }}</span></td>
       <td class="muted">{{ k.institution }}</td>
@@ -146,7 +172,9 @@ Prognose rechnet damit – geh sie einmal auf <a href="/annahmen">Annahmen</a> d
       <td class="muted">{{ k.parser_profile or '—' }}</td>
       <td class="num muted">{{ k.dispo_threshold_cents|euro if k.dispo_threshold_cents else '—' }}</td>
       <td class="muted fein">{{ k.ordner }}
-        {%- if k.ohne_backup %} <span class="pill">nicht im Backup</span>{% endif %}</td>
+        {%- if k.ohne_backup %} <span class="pill">nicht in der Sicherung</span>{% endif %}</td>
+      <td class="aktionen"><button type="button" class="ghost"
+        onclick="kontoOeffnen('{{ k.id }}')">Öffnen</button></td>
     </tr>
     {% endfor %}
   </table>
@@ -292,6 +320,47 @@ async function wiederherstellenDatei(knopf){
    wie beim Anlegen eines Kontos. */
 function schrittFertig(){ setTimeout(() => location.reload(), 900); }
 
+/* Ein Konto bearbeiten: die Zeile zeigt, was es tut; bearbeitet wird in einem Bereich darunter,
+   und offen ist immer nur eins (bearbeitungstabellen). */
+const KONTEN = {{ konten_maske|tojson }};
+let kontoOffen = null;
+const ke = n => document.getElementById('ke-' + n);
+function kontoSperren(){
+  const geparst = ke('modus').value === 'parsed';
+  ke('profil').disabled = !geparst;
+  if(!geparst) ke('profil').value = '';
+}
+function kontoZu(){ ke('panel').hidden = true; kontoOffen = null; }
+function kontoOeffnen(id){
+  if(kontoOffen === id){ kontoZu(); return; }
+  const k = KONTEN[id];
+  document.getElementById('kz-' + id).after(ke('panel'));
+  ke('titel').textContent = id;
+  ke('name').value = k.name; ke('institut').value = k.institut;
+  // Ein Profil, das die Auswahl nicht kennt, bleibt stehen, statt beim Speichern zu fehlen.
+  if(k.profil && ![...ke('profil').options].some(o => o.value === k.profil))
+    ke('profil').add(new Option(k.profil, k.profil));
+  ke('art').value = k.art; ke('modus').value = k.modus; ke('profil').value = k.profil;
+  ke('schwelle').value = k.schwelle; ke('ordner').value = k.ordner; ke('zu').value = k.zu;
+  ke('notiz').value = k.notiz;
+  ke('notiz-vom').textContent = k.notiz ? (k.notiz_vom ? 'vom ' + k.notiz_vom : 'ohne Datum') : '';
+  kontoSperren();
+  ke('panel').hidden = false; kontoOffen = id;
+}
+async function kontoSpeichern(knopf){
+  const res = await fetch('/api/konto-stammdaten/' + encodeURIComponent(kontoOffen), {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      display_name: ke('name').value, institution: ke('institut').value,
+      account_type: ke('art').value, ingest_mode: ke('modus').value,
+      parser_profile: ke('profil').value, dispo_threshold_cents_text: ke('schwelle').value,
+      statement_folder: ke('ordner').value, closed_on: ke('zu').value.trim(),
+      notiz: ke('notiz').value})});
+  const o = await res.json().catch(() => ({}));
+  if(!res.ok){ meldenNeben(knopf, o.error || 'Speichern fehlgeschlagen', true); return; }
+  meldenNeben(knopf, 'gespeichert', false);
+  setTimeout(() => location.reload(), 600);
+}
+
 async function personSpeichern(knopf){
   const res = await fetch('/api/person', {method:'POST',
     headers:{'Content-Type':'application/json'}, body: JSON.stringify({
@@ -319,7 +388,7 @@ async function moduleSpeichern(){
 /* ---------------------------------------------------- Auszug erkennen */
 const ROLLEN = [['datum', 'Datum *'], ['betrag', 'Betrag *'], ['wertstellung', 'Wertstellung'],
                 ['gegenpartei', 'Gegenpartei'], ['zweck', 'Verwendungszweck'], ['iban', 'IBAN'],
-                ['buchungstext', 'Buchungsart'], ['saldospalte', 'Saldo je Zeile']];
+                ['buchungstext', 'Buchungsart'], ['saldospalte', 'Stand je Zeile']];
 let analyse = null;
 
 function datei(){ return document.getElementById('ae-datei').files[0]; }
@@ -349,8 +418,8 @@ function zusammenfassung(e){
     : (e.abgestimmt ? '<span class="muted">' + e.warnungen.join(' ') + '</span>'
                     : '<span class="neg">geht nicht auf</span>');
   return '<p><strong>' + esc(e.bank) + '</strong>' + (e.konto ? ' · ' + esc(e.konto) : '')
-    + ' · ' + e.umsaetze + ' Umsätze vom ' + e.von + ' bis ' + e.bis
-    + (e.ohne_saldo ? '' : ' · Saldo ' + euroText(e.anfang_cents) + ' → ' + euroText(e.ende_cents))
+    + ' · ' + e.umsaetze + ' Buchungen vom ' + e.von + ' bis ' + e.bis
+    + (e.ohne_saldo ? '' : ' · Stand ' + euroText(e.anfang_cents) + ' → ' + euroText(e.ende_cents))
     + ' · ' + pruefung + '</p>';
 }
 function esc(s){ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
@@ -454,7 +523,7 @@ window.addEventListener('load', () => {
   ('config/accounts.yaml', 'Welche Konten es gibt — mit der Notiz; auch die hier angelegten.'),
   ('config/lebensplan.yaml', 'Geburtstag, Krankenversicherung und Rentenalter — auch von hier gesetzt.'),
   ('config/module_custom.yaml', 'Welche Module eingeschaltet sind.'),
-  ('config/csv_profile_custom.yaml', 'Selbst zugeordnete CSV-Exporte.'),
+  ('config/csv_profile_custom.yaml', 'Selbst zugeordnete CSV-Auszüge.'),
   ('finctl/web/templates/einrichtung.html', 'Die Texte dieser Seite.'),
 ], handbuch='einrichtung') }}
 {% endblock %}

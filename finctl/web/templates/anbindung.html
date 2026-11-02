@@ -1,0 +1,74 @@
+{% extends "base.html" %}{% block n_vorlagen %}on{% endblock %}
+{% block title %}Anbindung{% endblock %}
+{% block body %}
+{% import "_konfig.html" as kf %}
+<h1>Anbindung</h1>
+<p class="zweck">An welche Schnittstelle darf die App eine Vorlage schicken, wenn du es willst?</p>
+
+<div id="an-stand">{{ stand|safe }}</div>
+
+<h2>Eintragen</h2>
+<form class="suchzeile" onsubmit="anSpeichern(this); return false">
+  <label>Adresse <input id="an-adresse" value="{{ anbindung.adresse if anbindung }}"
+    placeholder="https://host/v1" autocomplete="off" style="min-width:18rem"></label>
+  <label>Modell <input id="an-modell" value="{{ anbindung.modell if anbindung }}" autocomplete="off"></label>
+  <label>Schlüssel <input id="an-schluessel" type="password" value="" autocomplete="off"
+    placeholder="{{ 'eingetragen' if schluessel else 'leer lassen für keinen' }}"></label>
+  <button type="submit">Speichern</button>
+</form>
+<p class="zeilen-knoepfe">
+  <button type="button" class="ghost" id="an-schluessel-weg" onclick="anSchluesselWeg(this)"
+    {{ 'hidden' if not schluessel }}>Schlüssel entfernen</button>
+  <button type="button" class="ghost" id="an-weg" onclick="anWeg(this)"
+    {{ 'hidden' if not anbindung }}>Anbindung entfernen</button></p>
+
+<details class="hilfe">
+  <summary>Was hinausgeht</summary>
+  <p>Beim Senden geht der Text einer Vorlage hinaus, sonst nichts.</p>
+  <p>Du siehst ihn vorher mit dem Ziel und bestätigst jedes Mal.</p>
+  <p>Der Schlüssel liegt in einer eigenen Datei im Datenordner, nicht in config/.</p>
+</details>
+
+<script>
+async function anSenden(url, body){
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                              body: JSON.stringify(body || {})});
+  return [r.ok, await r.json()];
+}
+function anAnzeigen(j, knopf, text){
+  document.getElementById('an-stand').innerHTML = j.html;
+  document.getElementById('an-schluessel').value = '';
+  document.getElementById('an-schluessel').placeholder = j.schluessel ? 'eingetragen' : 'leer lassen für keinen';
+  document.getElementById('an-schluessel-weg').hidden = !j.schluessel;
+  document.getElementById('an-weg').hidden = !j.anbindung;
+  meldenNeben(knopf, text);
+}
+async function anSpeichern(formular){
+  const knopf = formular.querySelector('button');
+  const feld = id => document.getElementById(id).value;
+  const [ok, j] = await anSenden('/api/vorlagen/anbindung',
+    {adresse: feld('an-adresse'), modell: feld('an-modell'), schluessel: feld('an-schluessel')});
+  if (!ok){ meldenNeben(knopf, j.error, true); return; }
+  anAnzeigen(j, knopf, 'gespeichert — nichts wurde gesendet');
+}
+async function anSchluesselWeg(knopf){
+  if (!confirm('Den Schlüssel entfernen?')) return;
+  const [ok, j] = await anSenden('/api/vorlagen/anbindung/schluessel-entfernen');
+  if (ok) anAnzeigen(j, knopf, 'Schlüssel entfernt');
+}
+async function anWeg(knopf){
+  if (!confirm('Die Anbindung entfernen? Adresse, Modell und Schlüssel sind danach weg.')) return;
+  const [ok, j] = await anSenden('/api/vorlagen/anbindung/entfernen');
+  if (ok){
+    document.getElementById('an-adresse').value = '';
+    document.getElementById('an-modell').value = '';
+    anAnzeigen(j, knopf, 'ausgeschaltet');
+  }
+}
+</script>
+
+{{ kf.fuss([
+  ('config/anbindung.yaml', 'Adresse und Modell. Der Schlüssel steht nicht hier.'),
+  ('finctl/web/templates/anbindung.html', 'Die Texte dieser Seite.'),
+], handbuch='vorlagen-anbindung') }}
+{% endblock %}

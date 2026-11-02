@@ -1,9 +1,11 @@
 {% extends "base.html" %}{% block n_immo %}on{% endblock %}
 {% block title %}{{ p.name }}{% endblock %}
 {% block body %}
+{% import "_notiz.html" as nz %}
 {% include "_combo.html" %}
 <h1>{{ p.name }} <span class="muted" style="font-weight:400">— {{ p.address or '' }}</span></h1>
 <p class="zweck">Ein Objekt: Anschaffung, Abschreibung, geplanter Verkauf und die Buchungen dahinter.</p>
+{{ nz.zeile(notiz, notiz_vom) }}
 
 <h2>Anschaffung &amp; AfA</h2>
 <div class="card">
@@ -128,7 +130,7 @@ async function speichernPrognose(knopf){
 </div>
 
 {% import "_summe.html" as sm %}
-<h2>Transaktionen {{ sm.kopf(summe) }}</h2>
+<h2>Buchungen {{ sm.kopf(summe) }}</h2>
 
 <div class="wrap">
 <table>

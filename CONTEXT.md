@@ -53,6 +53,10 @@ _Avoid_: Transaktion, Zahlung, Umsatz
 Ein Stück einer Buchung mit eigener Kategorie; jede Buchung besteht aus einem oder mehreren Teilen, die zusammen ihren Betrag ergeben.
 _Avoid_: Split, Aufteilung
 
+**Saldo**:
+Einnahmen minus Ausgaben eines Zeitraums, etwa eines Monats oder Jahres; anders als ein Stand sagt er nicht, was da ist, sondern was hinzukam oder fehlte. Bei einer Themenkasse: was ein Beteiligter beigetragen hat minus seinem Anteil.
+_Avoid_: Überschuss, Cashflow
+
 **Gegenpartei**:
 Wer auf der anderen Seite einer Buchung steht.
 _Avoid_: Empfänger, Partner, Counterparty
@@ -123,6 +127,14 @@ Die mitgelieferten Regeln für allgemeine Händler und Buchungsarten, mit denen 
 Was der Haushalt selbst festlegt und keine Regel überschreibt: die Kategorie einer Buchung oder den Takt einer Reihe.
 _Avoid_: Override, manuelle Korrektur
 
+**Vorschlag**:
+Was ein Modell dem Haushalt vorlegt und noch nichts ändert; erst wenn der Haushalt es in der App übernimmt, wird daraus eine Handentscheidung wie jede andere.
+_Avoid_: Änderung (vor der Zusage), Auftrag
+
+**Teilung**:
+Wie eine Buchung einer Themenkasse auf ihre Beteiligten verteilt wird: wer welchen Anteil trägt.
+_Avoid_: Aufteilung (das sind die Teile einer Buchung)
+
 **Reihe**:
 Alle Buchungen derselben Gegenpartei in derselben Kategorie über die Zeit; gemeint ist sie, wenn eine Handentscheidung auf eine einzelne Buchung zeigt. Eine Reihe hat einen Takt. Steht dieselbe Zahlung unter mehreren Schreibweisen der Gegenpartei, führt der Haushalt sie für die Vorschauen zu einer Reihe zusammen, die nach der einen heißt.
 
@@ -178,6 +190,10 @@ Ein Messgerät mit Ablesungen und Abschlag, das ein Versorger abrechnet: Strom, 
 Ein Brennstoff, der auf einmal geliefert und über die Zeit verbraucht wird, etwa Heizöl oder Pellets.
 _Avoid_: Tank, Lager
 
+**Mindestbestand**:
+Die Menge eines Vorrats, bis zu der er verbraucht werden darf; bis dorthin rechnet die App, wie lange er reicht.
+_Avoid_: Untergrenze (die gilt für Konten), Reserve
+
 **Frist**:
 Ein Datum, an dem der Haushalt handeln muss, mit einem Vorlauf, ab dem es bald fällig ist.
 _Avoid_: Termin, Deadline
@@ -223,6 +239,14 @@ _Avoid_: Tragfähigkeitsrechnung, Projektion
 **Fortschreibung**:
 Was Monatsmodell und Jahresrechnung aus der Vergangenheit in die Zukunft übernehmen, je Kategorie und Takt.
 _Avoid_: Basis, Baseline, Prognosebasis
+
+**Block**:
+Eine Gruppe von Kategorien, die beide Rechnungen gleich behandeln, etwa Gehalt, Fixkosten, Konsum, Verträge, Objekte oder Zinsen und Steuer.
+_Avoid_: Gruppe, Topf
+
+**Quelle**:
+Woher eine Rechnung den Betrag eines Blocks nimmt: aus dem Messfenster, aus einem Vertrag, einer erwarteten Einnahme, der Objektprognose, aus Stand und Satz oder aus einer Planzeile.
+_Avoid_: Herkunft, Basis
 
 **Messfenster**:
 Die zwölf letzten vollständigen Monate, aus denen beide Rechnungen ablesen, was fortzuschreiben ist. Was keine Reihe mit Takt, kein Vertrag und keine Planzeile erklärt, geht als ihre Summe, die Zwölfmonatssumme, in die Prognose ein: im Monatsmodell durch zwölf geteilt und auf dem Konto gebucht, auf dem gemessen wurde. Was eine Handentscheidung erklärt, steht nicht noch einmal im Messfenster.

@@ -25,8 +25,9 @@ Kennung in assumptions.yaml, Ziel, Soll und Planklammer in forecast.yaml. Ohne
 beides rechnet das Modul den Cashflow ohne Einmaliges und Investments --
 eine sinnvolle Zahl auch fuer den, der kein Objekt hat.
 
-Daneben das Gemeinschaftskonto gegen sein Soll aus forecast.yaml, weil es der
-groesste Posten ist, der 2026 gewachsen ist.
+DANEBEN steht, wenn forecast.yaml es nennt (`daneben`), eine Kategorie gegen ihr Soll:
+der Posten, den der Haushalt neben dem Cashflow im Blick behalten will. Ohne den
+Eintrag gibt es weder Karte noch Linie.
 """
 
 from __future__ import annotations
@@ -41,7 +42,6 @@ from finctl.forecast import abgleich as ag
 #: Objektblock steht nur in der Liste, wenn eines eingetragen ist -- sonst
 #: gibt es ihn nicht, und die Kennung laeuft ins Leere statt etwas zu treffen.
 GEMESSEN_OHNE = frozenset({ag.OBJEKT, ag.EINMALIG, "investment"})
-GEMEINSCHAFTSKONTO = "familie/gemeinschaftskonto"
 #: Kategorien, die kein Cashflow sind: Geld zwischen eigenen Konten und was ins
 #: Depot geht. Eine Umbuchung zwischen zwei projizierten Konten erkennt `zaehlt`
 #: am Merkmal des Postens (`Posten.umbuchung`), nicht an seinem Etikett.
@@ -52,12 +52,12 @@ _KEIN_CASHFLOW = ("transfer/", "investment/")
 class Monat:
     monat: date
     cents: int
-    gemeinschaftskonto_cents: int
+    daneben_cents: int
     gemessen: bool
 
 
 def einstellungen(fcfg: dict) -> dict:
-    """Ziel, Soll, Bezeichnung und Zuordnung aus forecast.yaml, mit Vorgaben.
+    """Ziel, Daneben, Bezeichnung und Zuordnung aus forecast.yaml, mit Vorgaben.
 
     Auch der NAME kommt aus der Konfiguration -- hier oder, wenn hier nichts
     steht, aus properties.yaml. Fest in die Vorlage geschrieben waere er ein
@@ -67,17 +67,30 @@ def einstellungen(fcfg: dict) -> dict:
     `klammer` sagt, welche Planklammer die Zeilen des Objekts traegt. Leer
     heisst: keine, und dann faellt aus der Vorausrechnung nur heraus, was
     ohnehin kein Cashflow ist.
+
+    `daneben` ist leer, wo der Haushalt keine Kategorie nennt, sonst
+    `{kategorie, label, soll_cents}`; ohne Bezeichnung heisst es wie die Kategorie.
     """
     roh = fcfg.get("cashflow_ohne_objekt") or {}
     return {"ziel_cents": int(roh.get("ziel_cents", 0) or 0),
-            "gemeinschaftskonto_soll_cents":
-                int(roh.get("gemeinschaftskonto_soll_cents", 0) or 0),
+            "daneben": _daneben(roh.get("daneben")),
             "label": str(roh.get("label") or ag.objekt_name()),
             "klammer": str(roh.get("klammer") or "") or None}
 
 
-def gemessen(conn: sqlite3.Connection, monate: int = 12) -> list[Monat]:
-    """Die letzten `monate` vollstaendigen Monate, je Monat gemessen."""
+def _daneben(roh) -> dict | None:
+    kategorie = str((roh or {}).get("kategorie") or "").strip() if isinstance(roh, dict) else ""
+    if not kategorie:
+        return None
+    return {"kategorie": kategorie, "label": str(roh.get("label") or kategorie),
+            "soll_cents": int(roh.get("soll_cents", 0) or 0)}
+
+
+def gemessen(conn: sqlite3.Connection, monate: int = 12,
+             daneben: str | None = None) -> list[Monat]:
+    """Die letzten `monate` vollstaendigen Monate, je Monat gemessen.
+
+    `daneben` ist die Kategorie, die zusaetzlich einzeln mitlaeuft."""
     f = ag.fenster(conn, monate)
     if f is None:
         return []
@@ -89,8 +102,7 @@ def gemessen(conn: sqlite3.Connection, monate: int = 12) -> list[Monat]:
             monat=m,
             cents=sum(c for blk, je in kat.items() if blk not in GEMESSEN_OHNE
                       for c in je.values()),
-            gemeinschaftskonto_cents=sum(je.get(GEMEINSCHAFTSKONTO, 0)
-                                         for je in kat.values()),
+            daneben_cents=sum(je.get(daneben, 0) for je in kat.values()) if daneben else 0,
             gemessen=True))
     return out
 
@@ -123,13 +135,14 @@ def zaehlt(label: str, herkunft: dict | None, klammer: str | None = None,
 
 
 def vorausgerechnet(views: list[dict], klammer: str | None = None,
-                    einmalig: frozenset[str] = frozenset()) -> list[Monat]:
+                    einmalig: frozenset[str] = frozenset(),
+                    daneben: str | None = None) -> list[Monat]:
     """Je Prognosemonat die Summe der zaehlenden Posten ueber alle Konten.
 
     `views` ist die Rueckgabe von ops.household_accounts.
     """
     summe: dict[str, int] = {}
-    gemeinschaft: dict[str, int] = {}
+    einzeln: dict[str, int] = {}
     for v in views:
         if v.get("error"):
             continue
@@ -137,15 +150,15 @@ def vorausgerechnet(views: list[dict], klammer: str | None = None,
         for row in v.get("rows") or []:
             monat = row["month"][:7]
             summe.setdefault(monat, 0)
-            gemeinschaft.setdefault(monat, 0)
+            einzeln.setdefault(monat, 0)
             for label, cents in (row.get("detail") or {}).items():
                 if not zaehlt(label, herkunft.get(label), klammer, einmalig):
                     continue
                 summe[monat] += cents
-                if label == GEMEINSCHAFTSKONTO:
-                    gemeinschaft[monat] += cents
+                if daneben and label == daneben:
+                    einzeln[monat] += cents
     return [Monat(monat=date.fromisoformat(m + "-01"), cents=summe[m],
-                  gemeinschaftskonto_cents=gemeinschaft[m], gemessen=False)
+                  daneben_cents=einzeln[m], gemessen=False)
             for m in sorted(summe)]
 
 
@@ -155,10 +168,11 @@ def _schnitt(werte: list[int]) -> int | None:
 
 def kennzahl(conn: sqlite3.Connection, views: list[dict], fcfg: dict,
              monate_gemessen: int = 12) -> dict:
-    """Alles, was die Seiten zeigen: Monate, Schnitte, Ziel und Soll."""
+    """Alles, was die Seiten zeigen: Monate, Schnitte, Ziel und Daneben."""
     ein = einstellungen(fcfg)
-    ist = gemessen(conn, monate_gemessen)
-    prog = vorausgerechnet(views, ein["klammer"], ag.einmalige_kategorien(conn))
+    kategorie = (ein["daneben"] or {}).get("kategorie")
+    ist = gemessen(conn, monate_gemessen, kategorie)
+    prog = vorausgerechnet(views, ein["klammer"], ag.einmalige_kategorien(conn), kategorie)
     naechste = prog[:12]
     letzter = ist[-1] if ist else None
     return {
@@ -172,6 +186,5 @@ def kennzahl(conn: sqlite3.Connection, views: list[dict], fcfg: dict,
         "prognose_anzahl": len(naechste),
         "prognose_erreicht": sum(1 for m in naechste
                                  if m.cents >= ein["ziel_cents"]),
-        "gemeinschaft_schnitt_cents": _schnitt(
-            [m.gemeinschaftskonto_cents for m in ist]),
+        "daneben_schnitt_cents": _schnitt([m.daneben_cents for m in ist]),
     }

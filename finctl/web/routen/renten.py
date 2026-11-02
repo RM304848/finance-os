@@ -68,7 +68,7 @@ def renten(request: Request):
         "ab": q.ab.strftime("%Y-%m") if q.ab else "",
         "stand": q.stand.isoformat() if q.stand else "",
         "kosten_hoch": q.kosten_pa is not None and q.kosten_pa > schwelle,
-        "notiz": q.notiz,
+        "notiz": q.notiz, "notiz_vom": q.notiz_vom,
     } for q in quellen]
     return TEMPLATES.TemplateResponse(request, "renten.html", {
         "zeilen": zeilen, "schwelle": schwelle, "jahr": heute.year,

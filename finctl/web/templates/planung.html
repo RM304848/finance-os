@@ -46,7 +46,7 @@
 
 <h2>Verpflichtungen</h2>
 {# Eine Schuld wegzurechnen darf kein Klick sein -- deshalb kein Schalter. #}
-<p class="muted klein" style="margin:-.3rem 0 .6rem">Eingegangen, gelten in jeder Projektion.</p>
+<p class="muted klein" style="margin:-.3rem 0 .6rem">Eingegangen, gelten in jeder Hochrechnung.</p>
 
 
 {% for k in klammern %}
@@ -61,19 +61,19 @@
 {% include "_klammer.html" with context %}
 {% endfor %}
 {% if not scenarios %}
-<p class="muted">Noch kein Plan. Unten unter „Neue Klammer" anlegen.</p>
+<p class="muted">Noch keine Klammer. Unten unter „Neue Klammer" anlegen.</p>
 {% endif %}
 
 {# Eine Klammer anlegen, egal welcher Art -- am Ende der Listen, dort, wo sie
    danach steht. Positionen kommen anschliessend in der Klammer selbst dazu. #}
 <details class="klapp" id="neue-klammer">
-  <summary>Neue Klammer <span class="zahl">— Plan oder Verpflichtung</span></summary>
+  <summary>Neue Klammer <span class="zahl">— Klammer oder Verpflichtung</span></summary>
   <div class="card">
     <div class="zeilen-form">
       <label>Name<input id="nk-name" placeholder="z.B. Zweitwagen"
         onkeydown="if(event.key==='Enter')neueKlammer()"></label>
       <label>Art<select id="nk-art" data-no-combo>
-        <option value="plan">Plan (abschaltbar)</option>
+        <option value="plan">Klammer (abschaltbar)</option>
         <option value="pflicht">Verpflichtung (gilt immer)</option>
       </select></label>
     </div>
@@ -85,7 +85,7 @@
 <details class="klapp" id="abgleich">
   <summary>Abgleich
     <span class="zahl">— letzte {{ abgleich.months }} vollständige Monate,
-      {{ abgleich.von[:7] }} bis {{ abgleich.bis[:7] }}: beschreibt der Plan dieselbe Welt wie das Ledger?</span></summary>
+      {{ abgleich.von[:7] }} bis {{ abgleich.bis[:7] }}: beschreibt die Klammer dieselbe Welt wie das Ledger?</span></summary>
 {# Die Bloecke sind GEORDNET, der erste Treffer gewinnt, und das ist kein
    Detail: kredit/tilgung und kredit/zinsen tragen beide das fixkosten-Flag,
    eine Fixkostensumme ueber das Flag zaehlt die Kreditraten also ein zweites
@@ -102,7 +102,7 @@
     <td>{{ r.block.label }}</td>
     <td class="num">{{ r.planned_cents|euro }}</td>
     <td class="num"><a class="plain" href="/transactions?block={{ r.block.id }}&amp;start={{ abgleich.von }}&amp;end={{ abgleich.bis }}&amp;limit=500"
-      title="Die Buchungen hinter dieser Zahl, mit derselben Blockdefinition. Eine Transaktion, deren Teile in zwei Blöcke fallen, erscheint in beiden -- die Summe dort kann deshalb um ein paar Euro abweichen."
+      title="Die Buchungen hinter dieser Zahl, mit derselben Blockdefinition. Eine Buchung, deren Teile in zwei Blöcke fallen, erscheint in beiden -- die Summe dort kann deshalb um ein paar Euro abweichen."
       >{{ r.measured_cents|euro }}</a></td>
     <td class="num {{ 'neg' if r.delta_cents|abs > 5000 else 'muted' }}">{{ r.delta_cents|euro }}</td>
     <td class="muted klein">{{ r.note }}</td>
@@ -112,7 +112,7 @@
 </div>
 {% if abgleich.unassigned_cents %}
 <div class="note bad">{{ abgleich.unassigned_cents|euro }} keinem Block zugeordnet.
-  Das ist immer ein Fehler in der Aufteilung, nie eine Eigenschaft der Daten.</div>
+  Das ist immer ein Fehler in den Teilen, nie eine Eigenschaft der Daten.</div>
 {% endif %}
 </details>
 
@@ -129,8 +129,6 @@ const st = document.getElementById('st');
 // welche Reihe gemeint ist -- beim Wegfall die, die endet, bei neuen Kosten die,
 // die schon gebucht ist. Gespeichert wird sofort, weil die Wirkung davon abhaengt.
 const ZUORDNUNG = {{ zuordnung|tojson }};
-const KATNAMEN = {{ kategorie_namen|tojson }};
-const escH = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Immer nur eine Zeile offen; nach dem Speichern oeffnet sie sich wieder.
 function oeffneZeile(zid){
   document.querySelectorAll('tr.panel').forEach(p => { if (p.id !== 'panel-' + zid) p.hidden = true; });
@@ -168,29 +166,18 @@ async function buchungSuchen(zid){
   const sichtbar = verborgen && verborgen.previousElementSibling;
   const kat = (sichtbar && sichtbar.tagName === 'INPUT' && !sichtbar.value.trim())
     ? '' : ((verborgen && verborgen.value) || '');
-  const ziel = document.getElementById('bt-' + zid);
+  // Was oben schon zugeordnet ist, nimmt der Server aus der Liste; die Liste
+  // selbst und den Satz darueber liefert er fertig.
+  const frage = new URLSearchParams({q, kategorie: kat, zid});
+  ZUORDNUNG[zid].hashes.forEach(h => frage.append('ausser', h));
+  const j = await (await fetch('/api/buchungen/suche?' + frage)).json();
+  document.getElementById('bt-' + zid).outerHTML = j.html;
+  if (j.kopf === null) return;
+  ZUORDNUNG[zid].kandidaten = j.rows.map(b => b.dedup_hash);
   const kopf = document.getElementById('bkopf-' + zid);
+  if (kopf && kopf.firstChild) kopf.firstChild.nodeValue = j.kopf + ' ';
   const alle = document.getElementById('balle-' + zid);
-  if (q.length < 2 && !kat){
-    ziel.innerHTML = '<tr><td class="muted">Text oder Kategorie angeben.</td></tr>'; return;
-  }
-  const r = await fetch('/api/buchungen/suche?q=' + encodeURIComponent(q) + '&kategorie=' + encodeURIComponent(kat));
-  const schon = new Set(ZUORDNUNG[zid].hashes);
-  const alleTreffer = (await r.json()).rows;
-  const rows = alleTreffer.filter(b => !schon.has(b.dedup_hash));
-  const bereits = alleTreffer.length - rows.length;
-  ZUORDNUNG[zid].kandidaten = rows.map(b => b.dedup_hash);
-  // Bereits Zugeordnetes steht oben und wird hier ausgeblendet -- das muss die
-  // Meldung sagen, sonst liest sich "nichts gefunden" wie ein Fehler der Suche.
-  const zusatz = bereits ? ` (${bereits} bereits zugeordnet, siehe oben)` : '';
-  if (kopf && kopf.firstChild) kopf.firstChild.nodeValue = rows.length
-    ? `${rows.length} Buchungen${kat ? '' : ' aus allen Kategorien'} — zählen erst nach dem Zuordnen${zusatz} `
-    : `Keine weitere Buchung gefunden${zusatz} `;
-  if (alle) alle.hidden = !rows.length;
-  ziel.innerHTML = rows.map(b => `<tr><td class="muted">${escH(b.booking_date)}</td>
-      <td class="muted">${escH(b.account_id)}</td><td>${escH(b.text)}</td>
-      <td class="num">${centsAlsText(b.amount_cents)} €</td><td class="muted">${escH(KATNAMEN[b.kategorie] || b.kategorie || '')}</td>
-      <td class="aktionen"><button class="ghost" onclick="buchungZu('${zid}', '${escH(b.dedup_hash)}')">zuordnen</button></td></tr>`).join('');
+  if (alle) alle.hidden = !j.alle;
 }
 const eur = centsAus;   // gemeinsamer Parser, siehe _betrag.html
 // Die Rueckmeldung steht neben dem Knopf, der sie ausgeloest hat (`ort`),
@@ -204,11 +191,6 @@ async function post(url, body, reload=true, ort=null){
   if (el){ el.textContent = 'gespeichert'; el.className = 'muted'; }
   if (reload) setTimeout(()=>location.reload(), 300);
   return true;
-}
-function neueKlammer(){
-  post('/api/szenario', {neu: true, name: document.getElementById('nk-name').value.trim(),
-                         pflicht: document.getElementById('nk-art').value === 'pflicht'},
-       true, 'meldung-neue-klammer');
 }
 function neueKlammer(){
   post('/api/szenario', {neu: true, name: document.getElementById('nk-name').value.trim(),
@@ -230,7 +212,7 @@ function umbenennen(id){
   post('/api/szenario', {id:id, name:name}, true, 'meldung-' + id);
 }
 function entfernen(id, name){
-  if (confirm('Szenario "'+name+'" endgültig löschen? Zum Parken reicht der Haken.'))
+  if (confirm('Klammer "'+name+'" endgültig löschen? Zum Parken reicht der Haken.'))
     post('/api/szenario', {id:id, loeschen:true}, true, 'meldung-' + id);
 }
 // Ein Wegfall hat keinen Betrag, keine Frequenz und keine Richtung -- alles

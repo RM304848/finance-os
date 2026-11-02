@@ -119,7 +119,6 @@ def test_pages_render(path):
     ("/report?year=2025", "/rueckblick?year=2025&ansicht=vorjahr"),
     ("/monitor", "/rueckblick?ansicht=fixkosten"),
     ("/monitor?umfang=alle&konto=x", "/rueckblick?konto=x&ansicht=alle"),
-    ("/prognosebasis", "/annahmen#prognosebasis"),
     ("/bestaende", "/monatsabschluss#konten"),
     ("/kontenregister", "/einrichtung#konten"),
     ("/abos", "/vertraege?ansicht=abos"),
@@ -334,7 +333,9 @@ def test_nothing_in_the_runtime_reaches_the_network_or_a_model():
     # Der Starter der App zum Doppelklicken fragt einen Port auf DIESEM
     # Rechner ab (frei? laeuft schon Finance OS?). Dafuer braucht er socket
     # und urllib -- und darf nirgendwo sonst hin.
-    nur_lokal = {"finctl/starter.py"}
+    # Die Anbindung (web/anbindung.py) ist die eine Datei, die ein Modell ansprechen darf,
+    # nur hinter dem Knopf nach dem Zeigen des Textes; tests/test_netz.py haelt das fest.
+    nur_lokal = {"finctl/starter.py", "finctl/web/anbindung.py"}
     offenders = []
     for path in pathlib.Path("finctl").rglob("*.py"):
         if path.as_posix() in nur_lokal:
@@ -1473,7 +1474,7 @@ def test_a_collapsed_fixed_cost_block_still_says_what_is_inside():
     html = client.get("/rueckblick?ansicht=fixkosten").text
     summaries = re.findall(r"<summary>(.*?)</summary>", html, re.S)
     assert summaries
-    assert any("Position" in s and "/ Monat" in s for s in summaries)
+    assert any("Kategorie" in s and "/ Monat" in s for s in summaries)
 
 
 # ------------------------------------------------- Planung: merged page
@@ -2013,7 +2014,7 @@ def test_planung_shows_commitments_and_plans_separately():
     """
     html = " ".join(client.get("/planung").text.split())
     assert "Verpflichtungen" in html and "Pläne" in html
-    assert "gelten in jeder Projektion" in html
+    assert "gelten in jeder Hochrechnung" in html
 
 
 def test_the_overview_is_gone_and_its_tiles_live_in_the_monthly_close():
@@ -2036,7 +2037,7 @@ def test_the_overview_is_gone_and_its_tiles_live_in_the_monthly_close():
 
     koerper = html[html.index("</header>"):]
     for kachel in ("Einnahmen", "Ausgaben", "Saldo", "Cashflow ohne ",
-                   "Transaktionen offen"):
+                   "Buchungen offen"):
         assert re.search(rf'<div class="k">{kachel}', koerper), kachel
     # Die Konten stehen als Zeilen mit Saldo und Beleg, nicht noch einmal
     # als Kacheln daneben.
@@ -2048,12 +2049,33 @@ def test_the_overview_is_gone_and_its_tiles_live_in_the_monthly_close():
 def test_konten_shows_the_cashflow_without_the_object():
     """Die Ueberschrift traegt den Namen aus der Konfiguration, nicht aus
     der Vorlage -- ein verkauftes Objekt stuende sonst noch Jahre dort."""
+    from finctl import kontenregeln as _kr
     from finctl.forecast import abgleich as _ag
 
     html = client.get("/konten").text
     assert 'id="ohne-objekt"' in html
     assert f"Cashflow ohne {_ag.objekt_name()}" in html
-    assert "Gemeinschaftskonto" in html
+    daneben = ((_kr.wirksam().get("cashflow_ohne_objekt") or {}).get("daneben") or {})
+    if daneben.get("kategorie"):
+        assert f'<div class="k">{daneben.get("label") or daneben["kategorie"]}' in html
+
+
+def test_konten_has_no_card_for_a_daneben_nobody_named(monkeypatch):
+    """Die Karte neben dem Cashflow hängt an `daneben` in forecast.yaml: ohne den Eintrag
+    keine Karte und keine Linie, welche Kategorien die Buchungen auch tragen."""
+    from finctl import kontenregeln as _kr
+
+    cfg = _kr.wirksam()
+    if not (cfg.get("cashflow_ohne_objekt") or {}).get("daneben"):
+        pytest.skip("diese Konfiguration nennt kein Daneben")
+    label = cfg["cashflow_ohne_objekt"]["daneben"].get("label") or \
+        cfg["cashflow_ohne_objekt"]["daneben"]["kategorie"]
+    ohne = {**cfg, "cashflow_ohne_objekt": {
+        k: v for k, v in cfg["cashflow_ohne_objekt"].items() if k != "daneben"}}
+    monkeypatch.setattr(_kr, "wirksam", lambda *a, **k: ohne)
+    html = client.get("/konten").text
+    assert 'id="ohne-objekt"' in html
+    assert f'<div class="k">{label}' not in html
 
 
 def test_konten_says_so_when_a_forecast_of_an_object_finds_no_account(monkeypatch):
@@ -2451,7 +2473,7 @@ def test_a_filtered_list_says_what_it_adds_up_to():
                  .group(1))
     assert eines <= gesamt
 
-    objekt = kopf(f"/immobilie/{_ein_objekt()}", r"<h2>Transaktionen(.*?)</h2>")
+    objekt = kopf(f"/immobilie/{_ein_objekt()}", r"<h2>Buchungen(.*?)</h2>")
     assert "Treffer" in objekt and "Summe" in objekt
 
 
@@ -2567,7 +2589,7 @@ def test_what_the_dashboard_writes_survives_a_rebuilt_database():
     Geprueft wird nicht, dass die Datei geschrieben wird, sondern dass eine
     LEERE Datenbank daraus wieder denselben Stand bekommt. Das ist die
     Eigenschaft, um die es geht. Seit N.3f steht die Untergrenze nur noch in
-    `forecast.yaml` und die Tabelle `settings` bleibt leer: Es gibt nichts, was
+    `forecast.yaml`, und die Tabelle `settings` gibt es nicht mehr: Es gibt nichts, was
     mit der Datenbank verloren ginge.
     """
     from finctl import kontenregeln
@@ -2605,7 +2627,10 @@ def test_what_the_dashboard_writes_survives_a_rebuilt_database():
         assert wieder["sale_price_cents"] == 15_000_000
         assert wieder["purchase_price_cents"] == 13_500_000
         # Die Untergrenze braucht die Datenbank nicht: Eine Zeile, die dort aus alter Zeit
-        # steht, gilt nicht (`_floor_for` liest nur die Datei).
+        # steht, gilt nicht (`_floor_for` liest nur die Datei). Das Schema legt die Tabelle
+        # nicht mehr an; eine Datenbank aelteren Standes hat sie.
+        c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, "
+                  "value TEXT NOT NULL, note TEXT, updated_at TEXT NOT NULL)")
         c.execute("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?,?,?)",
                   (f"floor_cents:{konto}", "1", "2026-01-01"))
         c.commit()
@@ -2613,7 +2638,7 @@ def test_what_the_dashboard_writes_survives_a_rebuilt_database():
     finally:
         Path("config/properties.yaml").write_text(props_vorher, encoding="utf-8")
         Path("config/forecast.yaml").write_bytes(forecast_vorher)
-        c.execute("DELETE FROM settings WHERE key = ?", (f"floor_cents:{konto}",))
+        c.execute("DROP TABLE IF EXISTS settings")
         c.execute("UPDATE properties SET sale_price_cents = ?, "
                   "purchase_price_cents = ? WHERE id = ?",
                   (alt["sale_price_cents"], alt["purchase_price_cents"], objekt))
@@ -3590,16 +3615,18 @@ def test_every_projected_year_opens_to_its_derivation():
     assert "klapp:" in html
 
 
-def test_the_forecast_basis_is_a_section_of_the_assumptions():
-    """Dieselbe Frage wie die Seite -- woraus die Extrapolation rechnet --,
-    also ein Abschnitt dort und keine eigene Seite."""
+def test_the_forecast_basis_has_its_own_page_and_the_assumptions_point_to_it():
+    """Die Fortschreibung zeigt je Block Quelle und Betrag auf einer eigenen Seite; /annahmen
+    hat dazu keinen zweiten Stand, sondern einen Verweis."""
     r = client.get("/prognosebasis", follow_redirects=False)
-    assert r.status_code == 307 and r.headers["location"] == "/annahmen#prognosebasis"
-    html = client.get("/annahmen").text
-    assert '<details class="klapp" id="prognosebasis">' in html
-    assert "/konten" in html and "Jahresrechnung" in html
+    assert r.status_code == 200
+    html = r.text
+    assert "<h1>Fortschreibung</h1>" in html
     assert "config/prognosebasis_custom.yaml" in html
-    assert 'href="/prognosebasis"' not in html
+    assert "/handbuch#prognosebasis" in html
+    annahmen = client.get("/annahmen").text
+    assert 'id="prognosebasis"' in annahmen and 'href="/prognosebasis"' in annahmen
+    assert 'class="fort"' not in annahmen and "Nicht fortschreiben" not in annahmen
 
 
 def test_the_forecast_basis_api_refuses_an_unknown_category():
@@ -4092,7 +4119,7 @@ def test_the_year_comparison_shows_every_year_without_asking_for_two():
 
     html = client.get("/rueckblick?ansicht=vorjahr").text
     tabelle = html[html.index("Kategorie und Subkategorie"):]
-    kopf = re.search(r"<tr><th>Position</th>(.*?)</tr>", tabelle, re.S).group(1)
+    kopf = re.search(r"<tr><th>Kategorie</th>(.*?)</tr>", tabelle, re.S).group(1)
     jahre = re.findall(r'<th class="num"[^>]*>(\d{4})', kopf)
     assert jahre and jahre == sorted(jahre), "jedes Jahr eine Spalte, aelteste zuerst"
     assert '<select name="year"' not in html and '<select name="vs"' not in html

@@ -1,0 +1,3 @@
+{# Der Kasten für einen neuen Vertrag; der Editor darin kommt aus _abo_editor.html. #}
+<div class="card" style="margin-bottom:1rem"><strong>{{ 'Neue Versicherung' if art == 'versicherung' else 'Neues Abo' }}</strong>
+  <div id="neu-editor">{% include "_abo_editor.html" %}</div></div>

@@ -101,7 +101,7 @@ regeln:
       Einnahme dazu.
     pruefung:
       art: datei_enthaelt
-      datei: finctl/web/templates/abos.html
+      datei: finctl/web/templates/_abo_editor.html
       muss: ['Ausgabe, ohne Vorzeichen', 'betrag_text']
 
   - id: vorschlagsliste
@@ -536,6 +536,61 @@ regeln:
       `tr.klappbar`.
     warum: Nach jedem Speichern sprang die Planungsseite nach oben, und alles war wieder zu.
 
+  - id: notiz-sichtbar
+    regel: >
+      Wo eine Seite einen Eintrag zeigt, der eine Notiz hat, zeigt sie die Notiz
+      auch: aufklappbar am Eintrag (`details.notiz` aus `_notiz.html`, kein
+      eigener Aufbau), mit dem Datum ihrer letzten Aenderung -- und „ohne Datum“,
+      wo sie aus der Zeit vor den Notizen stammt. Wo die Seite die Notiz zum
+      Bearbeiten in einem Feld zeigt, steht das Datum neben dem Feld
+      (`nz.stand`). Die Server-Route reicht `notiz` und `notiz_vom` mit
+      (`notiz_felder` in finctl/web/basis.py); das Datum setzt allein
+      `notizen.fortschreiben`, beim Speichern. Klammern der Planung tragen
+      keine Notiz (`keine-notizen-an-planklammern`).
+    warum: >
+      Seit Schritt 5 steht das Warum eines Eintrags als Notiz in der Datei, und
+      die Seiten zeigten es nur dort, wo ein Feld zum Bearbeiten war: eine
+      Regel, ein Kredit, ein Objekt, eine Annahme trugen eine Begruendung, die
+      niemand sah. Ohne Datum laesst sich nicht abschaetzen, ob eine Begruendung
+      noch gilt; „ohne Datum“ ist ehrlicher als ein erfundenes Alter.
+    pruefung:
+      art: datei_enthaelt
+      datei: finctl/web/templates/_notiz.html
+      muss: ['<details class="notiz">', "'ohne Datum'", 'macro zeile(text, vom)']
+
+  - id: entfernen-nennt-notiz
+    regel: >
+      Ein Knopf, der einen Eintrag samt Notiz aus einer Datei nimmt, fragt zurueck und
+      sagt, dass die Notiz mitgeht, mit ihrem Anfang. Der Knopf traegt
+      `data-notiz-geht` (`nz.geht_mit(…)` aus `_notiz.html`, leer ohne Notiz), und die
+      Rueckfrage laeuft ueber `rueckfrage(frage, knopf)` aus base.html, nicht ueber ein
+      blosses `confirm`. Das gilt fuer jede Stelle, die einen Eintrag mit `notiz` entfernt.
+    warum: >
+      Seit Schritt 5 steht das Warum eines Eintrags in seiner Notiz. Entfernen
+      nimmt den Eintrag aus der Datei, und die Rueckfrage sagte nur, dass er aus jeder
+      Rechnung faellt: Die Begruendung, nach der man in einem Jahr sucht, ging ohne Wort
+      mit. Der Anfang genuegt, um sie wiederzuerkennen.
+    pruefung:
+      art: datei_enthaelt
+      datei: finctl/web/templates/_notiz.html
+      muss: ['macro geht_mit(text)', 'data-notiz-geht']
+
+  - id: doppelt-gezaehlt-hinweis
+    regel: >
+      Eine eingelesene Buchung, die zu einer einmaligen Planzeile passt, ihr aber nicht
+      zugeordnet ist, wird gezeigt: an der Planzeile (`m.doppelt` in `_klammer.html`) mit
+      „zuordnen“ ueber dieselbe Zeile wie die Buchungssuche, und als Punkt im Monatsabschluss
+      (`monatsabschluss.planung_doppelt`). Was „passt“ heisst, steht an einer Stelle, in
+      finctl/forecast/szenarien.py (`doppelt_gezaehlt`), mit den Schwellen und ihrem Grund.
+    warum: >
+      Eine einmalige Zeile steht fuer genau eine Zahlung. Steht die Zahlung schon im
+      Hauptbuch, ohne der Zeile zugeordnet zu sein, zaehlt sie einmal gemessen und einmal
+      geplant. Das hat bisher jemand nach dem Import von Hand gesucht.
+    pruefung:
+      art: datei_enthaelt
+      datei: finctl/web/templates/_klammer.html
+      muss: ['m.doppelt', 'zählt doppelt', '_planung_buchungszeile.html']
+
   - id: reiter
     regel: >
       Mehrere Ansichten einer Seite sind Reiter: `rt.reiter()` aus
@@ -591,6 +646,40 @@ regeln:
       Jede Tabelle steht in `div.wrap` (waagerecht scrollbar statt
       Seitenueberlauf), Zahlenspalten tragen `.num`.
     warum: Auf 375 Pixeln schob eine breite Tabelle die ganze Seite zur Seite.
+
+  - id: html-vom-server
+    regel: >
+      Ein Skript baut kein HTML, es setzt Stuecke vom Server ein. Zeilen,
+      Trefferlisten und Editoren sind Teilvorlagen (`_planung_vorschlaege.html`,
+      `_abo_editor.html`): die Seite bindet sie beim Laden mit `{% include %}`
+      ein, die Schnittstelle liefert dasselbe Stueck als `html`
+      (`stueck()` in finctl/web/basis.py), und das Skript setzt es mit
+      `innerHTML` oder `outerHTML` ein. Das Skript liest Formularwerte und
+      schickt sie; es setzt weder Tags noch Zeilen aus Text zusammen.
+    warum: >
+      Dieselbe Zeile stand zweimal da, einmal in der Vorlage, einmal im
+      Skript, und die beiden liefen auseinander: die Treffer der Suche auf
+      /planung trugen keine Vorzeichenfarbe, die jede andere Buchungszeile
+      hat. Der Vertragseditor auf /vertraege existierte nur im Skript, stand
+      also weder in der Seite noch in der Referenz und liess sich nur im
+      Browser pruefen.
+    pruefung:
+      art: skript_ohne_html
+      # Skriptzeilen je Vorlage, die heute noch HTML zusammensetzen. Die Zahl
+      # darf sinken, bis die Vorlage aus der Liste faellt, und nie steigen.
+      ausnahmen:
+        _combo.html: 1
+        _ops.html: 6
+        einrichtung.html: 18
+        energie.html: 7
+        konten.html: 5
+        regeln.html: 6
+        split.html: 9
+    offen: >
+      Die Auswahlliste des Filterfelds (_combo.html), die Aktionsliste
+      (_ops.html), Einrichtung, Energie, Konten, Regeln und Aufteilen setzen
+      noch HTML im Skript zusammen. Sie ziehen in Teilvorlagen um, sobald
+      die Seite ohnehin angefasst wird.
 
   - id: seitenrhythmus
     regel: >
@@ -676,6 +765,65 @@ regeln:
       sich mit dem Kalender aendert, ohne dass sich etwas geaendert hat, ist
       keine Kennzahl.
 
+  - id: antwort-ist-vorschlag
+    regel: >
+      Eine Antwort, die der Haushalt aus einem KI-Modell einfuegt, wird zuerst
+      gelesen und geprueft und steht dann als Vorschlag da: Zeilen zum Anhaken
+      oder eine Erklaerung, deren Kennungen und Betraege die Seite gegen die
+      Lage haelt. Eine falsche Form ergibt eine Meldung neben dem Knopf und
+      keinen Schreibzugriff. Geschrieben wird erst, wenn jemand anhakt und
+      bestaetigt, ueber den Weg, den es schon gibt (`/api/regeln/vorschlaege/
+      uebernehmen`). Die Seite sagt neben dem Kopierknopf, dass die App nichts
+      sendet. Das Stueck mit dem Vorschlag kommt vom Server (`_vorlage_antwort.html`).
+    warum: >
+      Ein Modell erfindet Kategorien, Konten und Betraege, die es nicht gibt, und
+      eine Regel aus einem Vorschlag kann still das halbe Hauptbuch umordnen. Der
+      Haushalt soll sehen, was sich aendern wuerde, bevor es sich aendert (ADR 0002).
+    pruefung:
+      art: datei_enthaelt
+      datei: finctl/web/templates/vorlagen.html
+      muss: ['Die App sendet nichts', "'/api/vorlagen/pruefen'", 'vlUebernehmen']
+
+  - id: vorschlag-wird-in-der-app-bestaetigt
+    regel: >
+      Ein Vorschlag eines Modells (MCP, `finctl mcp`) liegt in `data/vorschlaege/`
+      und steht auf `/vorschlaege` mit dem, was sich aendern wuerde (Feld und Wert,
+      darunter Hinweise wie "Klammer ausgeschaltet"). "Uebernehmen" schickt Route und
+      Koerper, die der SERVER aus seiner Pruefung ableitet (nicht aus der Datei), an
+      die Route, die auch das Formular benutzt, und loescht den Vorschlag erst danach.
+      "Verwerfen" loescht ihn und laesst nichts zurueck. Ein Vorschlag, den die
+      Pruefung heute nicht mehr annimmt, nennt ihre Meldung und hat keinen
+      Uebernehmen-Knopf. Die Navigation zeigt die Zahl offener Vorschlaege.
+    warum: >
+      Ein Modell darf nie selbst schreiben (ADR 0002). Eine zweite Schreibstelle neben
+      den Routen hiesse zwei Wahrheiten ueber das, was gueltig ist; und eine Route
+      aus der Datei waere eine Tuer, durch die eine veraenderte Datei beliebig
+      schreibt.
+    pruefung:
+      art: datei_enthaelt
+      datei: finctl/web/templates/vorschlaege.html
+      muss: ['vsUebernehmen', 'vsVerwerfen', 'VS_SENDEN', '/api/vorschlaege/']
+
+  - id: senden-nur-auf-knopf
+    regel: >
+      Die App sendet nur, wenn eine Anbindung eingetragen ist UND jemand bei diesem
+      Text auf den Knopf im Stueck `_hinaus.html` druckt. Davor zeigt die Seite den
+      vollstaendigen Text und den Rechnernamen des Ziels, mit dem Satz "Das verlaesst
+      den Rechner"; geht die Adresse an den eigenen Rechner (localhost, 127.0.0.1, ::1),
+      steht dort, dass der Text auf diesem Rechner bleibt. Jedes Senden braucht einen neuen
+      Blick, es gibt kein "immer erlauben". Ohne Anbindung gibt es keinen Knopf zum
+      Senden. Der Schluessel ist ein Passwortfeld, wird nie wieder angezeigt (nur
+      "eingetragen", mit "Schluessel entfernen") und steht nicht in `config/`.
+    warum: >
+      Daten verlassen den Rechner nur auf ausdrueckliche Wahl des Haushalts (ADR 0002).
+      Eine Wahl, die man vorher nicht sehen kann, ist keine: Wer nicht weiss, welcher
+      Text an welchen Rechner geht, kann nicht zustimmen.
+    pruefung:
+      art: datei_enthaelt
+      datei: finctl/web/templates/_hinaus.html
+      muss: ['Das verlässt den Rechner', 'Der Text bleibt auf diesem Rechner',
+             'vl-hinaus-text', 'vlAbsenden']
+
   - id: kein-cdn
     regel: Keine Bibliothek aus dem Netz. Diagramme sind SVG aus finctl/web/diagramm.py.
     warum: Das Werkzeug muss ohne Netz laufen; ein CDN ist genau die Abhaengigkeit, die das bricht.
@@ -752,6 +900,49 @@ regeln:
       # `Sommer` (Jahreszeit). Dort steht die laengere Form oder nichts.
       verbotene_namen: config/verbotene_namen.yaml
       ausnahmen: []
+
+  - id: begriffe-des-glossars
+    regel: >
+      Fester Text spricht in den Begriffen von CONTEXT.md. Wo das Glossar ein
+      Wort fuehrt, steht dieses Wort -- Themenkasse, nicht Budgettopf oder
+      Geteilt; Buchung, nicht Transaktion; Objekt, nicht Immobilie; Takt, nicht
+      Frequenz; Klammer, nicht Szenario oder Plan; Planzeile, nicht Position;
+      Stand, nicht Saldo oder Kontostand; Sicherung, nicht Backup. Die Woerter
+      nach `_Avoid_` im Glossar stehen nicht in Vorlagen und nicht in den
+      Meldungen der Routen. Braucht eine Seite einen Begriff, den das Glossar
+      nicht hat, kommt er erst ins Glossar, dann in die Seite.
+    warum: >
+      Zwei Woerter fuer dieselbe Sache lesen sich wie zwei Sachen. Das Glossar
+      ist, was der Haushalt und die App einander versprechen; ein Seitentext,
+      der davon abweicht, macht die Seite zu einer Sprache fuer sich. Die
+      Pruefung bleibt Handarbeit (jedes Wort hat Ausnahmen: der Stand eines
+      Kontos ist kein Saldo einer Themenkasse), darum steht hier keine
+      Mustersuche, sondern der Auftrag an den, der eine Vorlage aendert.
+
+  - id: fester-text-nennt-keinen-einzelfall
+    regel: >
+      Fester Text in Vorlagen und Routen -- Beschriftung, Platzhalter,
+      Hinweis, Meldung -- nennt keine Kennung, kein Konto, keinen Anbieter,
+      keinen Betrag und keinen Monat des Haushalts. So etwas kommt als Wert
+      aus `config/` oder dem Hauptbuch. Ein Beispiel im Platzhalter ist
+      erfunden und neutral ("Name des Kontos", "Name des Vertrags"), kein
+      Anbieter. Die Pruefung liest die Kennungen und Namen der Konten,
+      Kredite, Objekte, Vertraege, Ziele, Rentenquellen, Klammern,
+      Themenkassen und Beteiligten zur Laufzeit aus `config/` und sucht sie
+      im Text der Vorlagen und der Routen; Betraege und Gegenparteien aus dem
+      Hauptbuch sucht `tests/test_leck.py`.
+    warum: >
+      Das Werkzeug soll anderen dienen. Ein Platzhalter "Name bei <Anbieter>"
+      sagt jedem anderen Haushalt, dass die Seite fuer einen anderen
+      geschrieben wurde, und ein Ziel mit fest verdrahteter Kennung
+      verschwindet still, sobald es anders heisst. Der Test liest die Namen
+      aus `config/`, weil eine Liste im Repository genau die Namen enthielte,
+      die sie verbietet.
+    pruefung:
+      art: einzelfaelle
+      # Treffer je Datei, die heute noch einen Einzelfall nennen. Die Zahl
+      # darf sinken, bis die Datei aus der Liste faellt, und nie steigen.
+      ausnahmen: {}
 
   - id: app-zweck
     regel: >
@@ -853,11 +1044,11 @@ regeln:
       handbuch_woerter_max: 200
       darf_fehlen: [prognosebasis_custom.yaml, strom.yaml, energie.yaml,
                     geteilt_custom.yaml, module_custom.yaml, csv_profile_custom.yaml,
-                    zinssaetze_custom.yaml, reihen_custom.yaml]
+                    zinssaetze_custom.yaml, reihen_custom.yaml, anbindung.yaml]
 
   - id: navigation
     regel: Jede Seite steht in genau einer Gruppe der Navigation.
     warum: Sechzehn gleichrangige Links zwangen dazu, den Namen einer Seite zu kennen, bevor man sie fand.
     pruefung:
       art: navigation
-      gruppen: [Überblick, Vorausschau, Objekte, Verträge, Geteilt, Stammdaten]
+      gruppen: [Überblick, Vorausschau, Objekte, Verträge, Themenkassen, Stammdaten]

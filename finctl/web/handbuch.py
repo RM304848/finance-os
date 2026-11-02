@@ -97,17 +97,21 @@ def als_html(pfad: Path | str = PFAD) -> str:
     aus: list[str] = []
     absatz: list[str] = []
     liste: list[str] = []
+    marken: list[str] = []
     tabelle: list[str] = []
     code: list[str] | None = None
 
     def absatz_schliessen() -> None:
-        nonlocal absatz, liste, tabelle
+        nonlocal absatz, liste, marken, tabelle
         if absatz:
             aus.append("<p>" + _inline(" ".join(absatz)) + "</p>")
             absatz = []
         if liste:
-            aus.append("<ul>" + "".join(f"<li>{_inline(p)}</li>" for p in liste) + "</ul>")
-            liste = []
+            # Schritte behalten ihre Nummern: "3. Trotzdem ausfuehren" ist eine Reihenfolge.
+            art = "ol" if marken[0][0].isdigit() else "ul"
+            aus.append(f"<{art}>" + "".join(f"<li>{_inline(p)}</li>" for p in liste)
+                       + f"</{art}>")
+            liste, marken = [], []
         if tabelle:
             aus.append(_tabelle(tabelle))
             tabelle = []
@@ -144,11 +148,12 @@ def als_html(pfad: Path | str = PFAD) -> str:
                 absatz_schliessen()
             tabelle.append(zeile)
             continue
-        punkt = re.match(r"\s*(?:[-*]|\d+\.)\s+(.*)", zeile)
+        punkt = re.match(r"\s*([-*]|\d+\.)\s+(.*)", zeile)
         if punkt:
             if absatz or tabelle:
                 absatz_schliessen()
-            liste.append(punkt.group(1))
+            marken.append(punkt.group(1))
+            liste.append(punkt.group(2))
             continue
         if liste:
             # Fortsetzungszeile eines Listenpunkts, nicht ein neuer Absatz.

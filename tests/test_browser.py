@@ -228,7 +228,7 @@ def test_split_gleichmaessig_verteilt_und_speichert_nichts(seite, config):
 SEITEN = ["/annahmen", "/einrichtung", "/renten", "/kredite", "/immobilie/{objekt}", "/konten",
           "/ziele", "/planung", "/abos", "/vertraege", "/monatsabschluss", "/energie", "/regeln",
           "/projekte", "/kategorien", "/geteilt/buchungen", "/tx/{buchung}"]
-SPEICHERN = r"^(Speichern|Aufteilung speichern|Anlegen)$"
+SPEICHERN = r"^(Speichern|Teile speichern|Anlegen)$"
 
 
 def _adresse(pfad: str) -> str:
@@ -600,7 +600,7 @@ def test_split_speichern_liest_den_betrag_als_text(seite, config, adresse):
     text = f"{gesamt / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     _betraege(seite, text)
     expect(seite.locator("#balance")).to_contain_text("geht genau auf")
-    seite.get_by_role("button", name="Aufteilung speichern").click()
+    seite.get_by_role("button", name="Teile speichern").click()
     expect(seite.locator("#status")).to_contain_text("Teile gespeichert")
     db = sqlite3.connect(DB)
     assert db.execute("SELECT SUM(amount_cents) FROM splits WHERE transaction_id=?",
@@ -726,18 +726,34 @@ def test_kombifeld_uebernimmt_die_kennung_der_auswahl(seite, config, adresse):
 
 
 def test_klappzustand_ueberlebt_das_neuladen(seite, config, adresse):
-    seite.goto(adresse + "/annahmen")
-    kasten = seite.locator("details#prognosebasis")
+    seite.goto(adresse + "/prognosebasis")
+    kasten = seite.locator("details#nicht-fortschreiben")
     if not kasten.count():
-        pytest.skip("keine Prognosebasis")
+        pytest.skip("keine Fortschreibung")
     assert kasten.evaluate("d => d.open") is False
     kasten.locator("> summary").click()
     assert kasten.evaluate("d => d.open") is True
     seite.reload()
-    assert seite.locator("details#prognosebasis").evaluate("d => d.open") is True
-    seite.locator("details#prognosebasis > summary").click()
+    assert seite.locator("details#nicht-fortschreiben").evaluate("d => d.open") is True
+    seite.locator("details#nicht-fortschreiben > summary").click()
     seite.reload()
-    assert seite.locator("details#prognosebasis").evaluate("d => d.open") is False
+    assert seite.locator("details#nicht-fortschreiben").evaluate("d => d.open") is False
+
+
+def test_die_abwahl_zeigt_vorher_und_nachher_und_speichert_erst_mit_dem_knopf(
+        seite, config, adresse):
+    seite.goto(adresse + "/prognosebasis")
+    haken = seite.locator("input.fort")
+    if not haken.count():
+        pytest.skip("keine abwaehlbare Kategorie")
+    seite.locator("details#nicht-fortschreiben > summary").click()
+    assert seite.locator("#basis-speichern").is_disabled()
+    haken.first.click()
+    assert "→" in seite.locator("#summe-konten").inner_text()
+    assert "→" in seite.locator("#summe-jahr").inner_text()
+    assert seite.locator("#basis-speichern").is_enabled()
+    haken.first.click()
+    assert seite.locator("#basis-speichern").is_disabled()
 
 
 # ------------------------------------------------------------- /reihen
@@ -1150,10 +1166,107 @@ def test_notiz_eines_vertrags_ist_mehrzeilig(seite, config, adresse, ansicht):
         vorgeben=lambda: _datei_aendern(datei, lambda d: _notiz_legen(
             next(e for e in d[ansicht] if e["id"] == kennung))),
         # Die Seite merkt, welcher Vertrag offen war; ein Klick auf den offenen schlosse ihn.
-        oeffnen=lambda s: None if s.locator(f"{box} [data-f='warum']").is_visible()
+        oeffnen=lambda s: None if s.locator(f"{box} [data-f='notiz']").is_visible()
         else s.locator(f"#abo-{kennung} summary").click(),
-        feld=lambda s: s.locator(f"{box} [data-f='warum']"),
+        feld=lambda s: s.locator(f"{box} [data-f='notiz']"),
         speichern=lambda s: _speichern_und_warten(s, s.locator(f"{box} [data-a='speichern']")))
+
+
+# ----------------------------------- Stuecke vom Server (Schritt 6a)
+#
+# Die Skripte von /planung und /vertraege setzen nur noch ein, was der Server
+# schickt. Geprueft wird deshalb nur die Naht: Text hin, Antwort zeigen. Wie
+# das Stueck aussieht, steht in tests/test_html_stuecke.py.
+
+#: Ein Suchtext, der nichts findet, sonst haengt der Test an den Daten.
+NIRGENDS = "zzzz-gibt-es-nirgends"
+
+
+def test_planung_suche_zeigt_die_antwort_des_servers(seite, config, adresse):
+    seite.goto(adresse + "/planung")
+    seite.evaluate("document.querySelectorAll('details').forEach(d => d.open = true)")
+    formular = seite.locator("form.suchzeile[onsubmit*='buchungSuchen(']")
+    if formular.count() == 0:
+        pytest.skip("keine Planzeile mit Suche")
+    zid = formular.first.get_attribute("onsubmit").split("'")[1]
+    seite.evaluate(f"document.getElementById('panel-{zid}').hidden = false")
+    seite.locator(f"#bq-{zid}").fill(NIRGENDS)
+    seite.locator(f"#bq-{zid}").press("Enter")
+    expect(seite.locator(f"#bkopf-{zid}")).to_contain_text("Keine weitere Buchung gefunden")
+    expect(seite.locator(f"#balle-{zid}")).to_be_hidden()
+    # Das Stueck ersetzt die Tabelle samt Kennung: die naechste Suche findet sie wieder.
+    expect(seite.locator(f"#bt-{zid}")).to_have_count(1)
+    assert _dateien() == config
+
+
+@pytest.mark.parametrize("ansicht", ["abos", "versicherungen"])
+def test_vertragseditor_zeichnet_die_antwort_des_servers(seite, config, adresse, ansicht):
+    seite.goto(adresse + f"/vertraege?ansicht={ansicht}")
+    zeile = seite.locator("table tr.klappbar").first
+    if zeile.count() == 0:
+        pytest.skip(f"{ansicht}: kein Vertrag")
+    kennung = zeile.get_attribute("onclick").split("oeffne('")[1].split("'")[0]
+    box = seite.locator(f"#editor-{kennung}")
+    seite.evaluate(f"document.getElementById('abo-{kennung}').open = true")
+    personen = box.locator("input[data-b][data-k='name']")
+    vorher = personen.count()
+    box.locator("[data-a='b-neu']").click()
+    expect(personen).to_have_count(vorher + 1)
+    box.locator("[data-q]").fill(NIRGENDS)
+    box.locator("[data-suche] button[type='submit']").click()
+    expect(box.locator("[data-treffer]")).not_to_be_empty()
+    # Gezeichnet ist nur, nicht gespeichert.
+    assert _dateien() == config
+
+
+@pytest.mark.parametrize("ansicht", ["abos", "versicherungen"])
+def test_neuer_vertrag_kommt_als_kasten_vom_server(seite, config, adresse, ansicht):
+    seite.goto(adresse + f"/vertraege?ansicht={ansicht}")
+    seite.locator("button[onclick='neuesAbo()']").click()
+    expect(seite.locator("#neu-editor [data-f='id']")).to_be_visible()
+    seite.locator("#neu-editor [data-a='abbrechen']").click()
+    expect(seite.locator("#neu")).to_be_empty()
+    assert _dateien() == config
+
+
+#: Der Editor zeichnet nach jedem Klick ueber den Server neu. Damit der Test die Zeit
+#: dazwischen trifft, verzoegert er die Antwort im Browser (nicht auf dem Server): Die
+#: Anfrage geht mit dem Stand beim Klick ab, getippt wird, solange sie unterwegs ist.
+VERZOEGERT = """(ms) => {
+  const echt = window.fetch;
+  window.fetch = (url, opt) => String(url).includes('/api/abos/editor')
+    ? new Promise(r => setTimeout(r, ms)).then(() => echt(url, opt)) : echt(url, opt);
+}"""
+
+
+@pytest.mark.parametrize("ansicht", ["abos", "versicherungen"])
+def test_tippen_waehrend_des_neuzeichnens_geht_nicht_verloren(seite, config, adresse, ansicht):
+    """Wer tippt, waehrend der Editor neu gezeichnet wird, verliert keinen Buchstaben.
+
+    Gemessen mit einer Antwort, die 700 ms braucht, und acht Buchstaben im Abstand von 150 ms:
+    Der Klick liegt vor dem ersten, die Antwort mitten dazwischen. Jeder Buchstabe muss im
+    Feld stehen, in der Reihenfolge, und der Fokus bleibt im Feld.
+    """
+    seite.goto(adresse + f"/vertraege?ansicht={ansicht}")
+    zeile = seite.locator("table tr.klappbar").first
+    if zeile.count() == 0:
+        pytest.skip(f"{ansicht}: kein Vertrag")
+    kennung = zeile.get_attribute("onclick").split("oeffne('")[1].split("'")[0]
+    seite.evaluate(f"document.getElementById('abo-{kennung}').open = true")
+    box = seite.locator(f"#editor-{kennung}")
+    name = box.locator("[data-f='name']")
+    vorher = name.input_value()
+    seite.evaluate(VERZOEGERT, 700)
+    personen = box.locator("input[data-b][data-k='name']")
+    anzahl = personen.count()
+    box.locator("[data-a='b-neu']").click()
+    name.evaluate("el => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }")
+    seite.keyboard.type("QWERTZUI", delay=150)
+    expect(personen).to_have_count(anzahl + 1)
+    expect(box.locator("[data-f='name']")).to_have_value(vorher + "QWERTZUI")
+    assert box.locator("[data-f='name']").evaluate("el => el === document.activeElement"), \
+        "der Fokus blieb nicht im Feld"
+    assert _dateien() == config
 
 
 def test_notiz_eines_bestands_ist_mehrzeilig(seite, config, adresse):
@@ -1174,3 +1287,165 @@ def test_notiz_eines_bestands_ist_mehrzeilig(seite, config, adresse):
         feld=lambda s: s.locator(f"{zeile_} textarea[data-feld='notiz']"),
         speichern=lambda s: _speichern_und_warten(s, s.locator(f"{zeile_} [data-knopf]")),
         unveraendert=_tippen_und_zuruecknehmen)
+
+
+# --------------------------------------------------------------- /vorlagen
+
+@pytest.mark.parametrize("art", ["monat", "prognose"])
+def test_vorlage_text_hin_antwort_zeigen(seite, config, adresse, art):
+    seite.goto(adresse + f"/vorlagen?art={art}")
+    text = seite.locator("#vl-text")
+    expect(text).to_contain_text("# Begriffe")
+    expect(text).to_contain_text("# Lage")
+    expect(text).to_contain_text("# Frage")
+    seite.get_by_role("button", name="Kopieren").click()
+    expect(seite.locator(".meldung").first).to_be_visible()
+    # Eine Antwort in falscher Form: eine Meldung neben dem Knopf, kein Vorschlag.
+    seite.locator("#vl-antwort").fill("Das sieht gut aus.")
+    seite.get_by_role("button", name="Prüfen").click()
+    expect(seite.locator(".meldung", has_text="ZUSAMMENFASSUNG")).to_be_visible()
+    expect(seite.locator("#vl-ergebnis")).to_be_hidden()
+    # Eine Antwort in der Form: sie steht als Vorschlag da, geschrieben ist nichts.
+    seite.locator("#vl-antwort").fill("ZUSAMMENFASSUNG: Nichts fällt auf.")
+    seite.get_by_role("button", name="Prüfen").click()
+    expect(seite.locator("#vl-ergebnis")).to_contain_text("Nichts fällt auf.")
+    assert _dateien() == config
+
+
+def test_vorlage_neu_erzeugen_nimmt_monat_und_frage(seite, config, adresse):
+    seite.goto(adresse + "/vorlagen?art=monat")
+    seite.locator("#vl-monat").fill("2026-03")
+    seite.get_by_role("button", name="Vorlage neu erzeugen").click()
+    expect(seite.locator("#vl-text")).to_have_value(re.compile(r"Monat: 2026-03"))
+    seite.locator("#vl-monat").fill("Oktober")
+    seite.get_by_role("button", name="Vorlage neu erzeugen").click()
+    expect(seite.locator(".meldung", has_text="JJJJ-MM")).to_be_visible()
+    expect(seite.locator("#vl-text")).to_have_value(re.compile(r"Monat: 2026-03"))     # unverändert
+    seite.goto(adresse + "/vorlagen?art=prognose")
+    seite.locator("#vl-frage").fill("Reicht das Geld bis zur Rente?")
+    seite.get_by_role("button", name="Vorlage neu erzeugen").click()
+    expect(seite.locator("#vl-text")).to_have_value(re.compile("Reicht das Geld bis zur Rente"))
+    assert _dateien() == config
+
+
+def test_vorlage_einordnen_antwort_wird_nicht_ohne_haken_uebernommen(seite, config, adresse):
+    seite.goto(adresse + "/vorlagen?art=einordnen")
+    if seite.locator(".vl-text").count() == 0:
+        pytest.skip("keine offenen Buchungen")
+    kategorie = sqlite3.connect(DB).execute(
+        "SELECT id FROM mgmt_categories WHERE active = 1 ORDER BY id LIMIT 1").fetchone()[0]
+    seite.locator("#vl-antwort").fill(f"zzzz erfundener suchtext ; {kategorie}")
+    seite.get_by_role("button", name="Prüfen").click()
+    expect(seite.locator("#vl-ergebnis")).to_contain_text("zzzz erfundener suchtext")
+    assert _dateien() == config
+
+
+def test_vorlage_senden_zeigt_erst_und_sendet_genau_den_text(seite, config, adresse,
+                                                              tmp_path, monkeypatch):
+    """Anbindung eintragen, den Text sehen, bestaetigen, die Antwort steht als Vorschlag da."""
+    from modellattrappe import ANTWORT, SCHLUESSEL, Server
+
+    from finctl.web import anbindung as an
+
+    monkeypatch.setattr(an, "PFAD", tmp_path / "anbindung.yaml")
+    monkeypatch.setattr(an, "SCHLUESSEL_PATH", tmp_path / "anbindung.schluessel")
+    server = Server()
+    try:
+        seite.goto(adresse + "/vorlagen?art=monat")
+        expect(seite.get_by_role("button", name="Senden …")).to_have_count(0)    # ausgeschaltet
+        seite.goto(adresse + "/vorlagen/anbindung")
+        seite.locator("#an-adresse").fill(server.adresse)
+        seite.locator("#an-modell").fill("test-modell")
+        seite.locator("#an-schluessel").fill(SCHLUESSEL)
+        seite.get_by_role("button", name="Speichern").click()
+        expect(seite.locator("#an-stand")).to_contain_text("test-modell")
+        expect(seite.locator("#an-schluessel")).to_have_value("")
+        expect(seite.locator("body")).not_to_contain_text(SCHLUESSEL)
+        assert server.anfragen == []                      # Eintragen verbindet nicht
+
+        seite.goto(adresse + "/vorlagen?art=monat")
+        # Zeigen und abbrechen: nichts geht hinaus.
+        seite.get_by_role("button", name="Senden …").click()
+        expect(seite.locator("#vl-hinaus-text")).to_be_visible()
+        seite.get_by_role("button", name="Abbrechen").click()
+        expect(seite.locator("#vl-hinaus-text")).to_have_count(0)
+        assert server.anfragen == []
+        # Zeigen und bestaetigen: genau der gezeigte Text geht hinaus.
+        seite.get_by_role("button", name="Senden …").click()
+        expect(seite.locator("#vl-hinaus-inhalt")).to_contain_text(
+            "Der Text bleibt auf diesem Rechner")
+        gezeigt = seite.locator("#vl-hinaus-text").input_value()
+        assert gezeigt == seite.locator("#vl-text").input_value()
+        assert server.anfragen == []
+        seite.get_by_role("button", name="An 127.0.0.1 senden").click()
+        expect(seite.locator("#vl-antwort")).to_have_value(ANTWORT)
+        expect(seite.locator("#vl-ergebnis")).to_contain_text("Nichts fällt auf.")
+        [anfrage] = server.anfragen
+        assert anfrage["koerper"]["messages"] == [{"role": "user", "content": gezeigt}]
+        expect(seite.locator("#vl-hinaus-text")).to_have_count(0)
+        # Beim naechsten Mal wieder zeigen, nicht senden.
+        seite.get_by_role("button", name="Senden …").click()
+        expect(seite.locator("#vl-hinaus-text")).to_be_visible()
+        assert len(server.anfragen) == 1
+
+        seite.goto(adresse + "/vorlagen/anbindung")
+        seite.get_by_role("button", name="Anbindung entfernen").click()
+        expect(seite.locator("#an-stand")).to_contain_text("ausgeschaltet")
+        seite.goto(adresse + "/vorlagen?art=monat")
+        expect(seite.get_by_role("button", name="Senden …")).to_have_count(0)
+        assert not an.SCHLUESSEL_PATH.exists()
+    finally:
+        server.schliessen()
+    assert _dateien() == config
+
+
+# ------------------------------------------------------------- /vorschlaege
+
+def _vorschlaege_ablegen() -> tuple[str, str]:
+    """Zwei gueltige Vorschlaege aus dem Haushalt: eine Notiz am Konto, eine Planzeile."""
+    from finctl.ledger.db import connect
+    from finctl.web import vorschlaege as vs
+
+    c = connect()
+    try:
+        konto = c.execute("SELECT id FROM accounts WHERE active = 1 ORDER BY id").fetchone()[0]
+        kategorie = c.execute("SELECT id FROM mgmt_categories WHERE active = 1 "
+                              "AND parent_id IS NOT NULL ORDER BY id").fetchone()[0]
+        notiz = vs.ablegen("notiz", {"ort": "konto", "id": konto,
+                                     "notiz": "Probe: warum das Konto so ist."}, "Weil Probe.", c)
+        zeile = vs.ablegen("planzeile", {"szenario": "Probe-Klammer", "label": "Probe-Zeile",
+                                         "start": "2031-01-01", "kategorie": kategorie,
+                                         "amount_cents": -12300}, "", c)
+    finally:
+        c.close()
+    return notiz.id, zeile.id
+
+
+def test_vorschlag_uebernehmen_schreibt_wie_das_formular_und_verwerfen_laesst_nichts(
+        seite, config, adresse):
+    from finctl.pfade import VORSCHLAEGE_DIR
+    from finctl.web import vorschlaege as vs
+
+    for v in vs.alle():
+        vs.verwerfen(v.id)
+    notiz, zeile = _vorschlaege_ablegen()
+    try:
+        seite.goto(adresse + "/vorschlaege")
+        expect(seite.locator("header a[href='/vorschlaege'] .zahl")).to_have_text("2")
+        expect(seite.locator(f"#vs-{notiz}")).to_contain_text("Probe: warum das Konto so ist.")
+        assert _dateien() == config                   # ansehen schreibt nichts
+
+        seite.locator(f"#vs-{notiz}").get_by_role("button", name="Übernehmen").click()
+        expect(seite.locator(f"#vs-{notiz}")).to_have_count(0)      # Seite neu geladen
+        nach_notiz = _dateien()
+        assert nach_notiz != config
+        assert b"Probe: warum das Konto so ist." in nach_notiz["forecast.yaml"]
+        assert not (VORSCHLAEGE_DIR / f"{notiz}.json").exists()
+
+        seite.locator(f"#vs-{zeile}").get_by_role("button", name="Verwerfen").click()
+        expect(seite.locator("main .note", has_text="Kein offener Vorschlag")).to_be_visible()
+        assert _dateien() == nach_notiz               # Verwerfen aendert nichts
+        assert not list(VORSCHLAEGE_DIR.glob("*.json"))
+    finally:
+        for v in vs.alle():
+            vs.verwerfen(v.id)

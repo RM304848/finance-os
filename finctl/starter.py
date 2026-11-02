@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 import socket
+import sys
 import threading
 import time
 import urllib.request
@@ -111,6 +112,12 @@ def _browser_wenn_bereit(server, adresse: str) -> None:
 
 
 def main() -> None:
+    # `Finance OS mcp` im Paket: derselbe Zugang wie `finctl mcp`, ohne Server und Browser.
+    if sys.argv[1:2] == ["mcp"]:
+        from finctl.mcp import laufen
+
+        laufen()
+        return
     port, laeuft = port_waehlen(int(os.environ.get("FINCTL_APP_PORT") or PORT))
     adresse = f"http://{HOST}:{port}/"
     if laeuft:

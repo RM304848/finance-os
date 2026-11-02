@@ -1,0 +1,36 @@
+{# Die geprüfte Antwort eines Modells, als Vorschlag. Der Server liefert sie als
+   `html`, die Seite setzt sie ein; fremder Text steht nur als Wert. #}
+{% if art == 'einordnen' %}
+<div class="wrap"><table class="detail">
+  <tr><th style="width:34px"></th><th>Suchtext</th><th>Kategorie</th>
+      <th class="num">Fängt offen</th><th class="num">Widerspricht</th></tr>
+  {% for z in zeilen %}
+  {% set brauchbar = z.bekannt and not z.zu_kurz %}
+  <tr>
+    <td><input type="checkbox" class="vl-nehmen" data-text="{{ z.text }}" data-kategorie="{{ z.kategorie }}"
+         {{ 'disabled' if not brauchbar }} {{ 'checked' if brauchbar and z.offen > 0 and not z.anders }}></td>
+    <td>{{ z.text }}</td>
+    <td{% if not z.bekannt %} class="neg"{% endif %}>{{ z.kategorie }}{% if not z.bekannt %} — unbekannt{% endif %}</td>
+    <td class="num">{{ 'zu kurz' if z.zu_kurz else z.offen }}</td>
+    <td class="num {{ 'neg' if z.anders else 'muted' }}">{{ (z.anders ~ ' zugeordnete') if z.anders else '—' }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+<p class="zeilen-knoepfe"><button type="button" onclick="vlUebernehmen(this)">Angehakte übernehmen</button></p>
+{% else %}
+<h3>Zusammenfassung</h3>
+<p>{{ erklaerung.zusammenfassung }}</p>
+{% if erklaerung.auffaellig %}
+<h3>Auffällig</h3>
+<div class="wrap"><table class="detail">
+  <tr><th>Kennung</th><th>Satz</th></tr>
+  {% for kennung, satz, bekannt in erklaerung.auffaellig %}
+  <tr><td>{{ kennung }}{% if not bekannt %} <span class="pill">nicht in der Lage</span>{% endif %}</td>
+      <td>{{ satz }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+{% if erklaerung.fremde_betraege %}
+<div class="note">Nicht in der Lage: {{ erklaerung.fremde_betraege|join(', ') }}</div>
+{% endif %}
+{% endif %}

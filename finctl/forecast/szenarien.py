@@ -20,7 +20,7 @@ Amounts follow the ledger's sign convention throughout: negative is money out.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from finctl.dateien import yaml_lesen
@@ -495,6 +495,102 @@ def vorschlaege(conn, line: Line, f, limit: int = 60) -> list[dict]:
             FROM   transactions t JOIN splits s ON s.transaction_id = t.id
             WHERE  {' AND '.join(bedingung)}
             ORDER  BY t.booking_date DESC LIMIT ?""", [*args, limit])]
+
+
+# ---------------------------------------------- einmalige Zeile gegen Buchung
+#
+# Eine einmalige Zeile steht fuer GENAU eine Zahlung. Steht diese Zahlung schon im
+# Hauptbuch und ist der Zeile nicht zugeordnet, zaehlt sie doppelt: als Messung, in der
+# Basis, und als Zeile, mit vollem Betrag. Zugeordnet nimmt sie die Messung heraus und
+# die Zeile fuellt sich nicht mehr (`restbetrag_je_termin`).
+#
+# Was "passt", ist eine Vermutung, und die Schwellen sind so gesetzt, dass sie eher
+# anschlagen als schweigen: Ein Hinweis zu viel kostet einen Blick und verschwindet mit
+# dem Zuordnen; ein Hinweis zu wenig laesst eine Zahlung doppelt zaehlen, ohne dass es jemand sieht.
+#
+# BETRAG: Der geplante Betrag ist eine Schaetzung, meist auf zehn oder hundert Euro
+# gerundet; die Rechnung weicht um Versand, Gebuehren oder Steuer ab, selten um mehr als
+# ein Zehntel. Darueber ist es eher eine andere Zahlung derselben Kategorie. Bei kleinen
+# Betraegen gilt eine Mindestabweichung von fuenf Euro, damit eine Zeile ueber 20 Euro
+# eine Buchung ueber 24 Euro noch trifft.
+DOPPELT_BETRAG_ANTEIL = 0.10
+DOPPELT_BETRAG_MINDEST_CENTS = 500
+# DATUM: Die Zeile nennt einen Monat, nicht einen Tag. Gezahlt wird in der Woche davor
+# oder danach, wenn die Rechnung frueh kommt oder das Konto spaet belastet wird; zwei
+# Wochen decken beides, ohne in den uebernaechsten Monat zu greifen.
+DOPPELT_TAGE_DANEBEN = 14
+#: So viele Buchungen zeigt der Hinweis je Zeile; eine breite Kategorie fuellt die Seite nicht.
+DOPPELT_GRENZE = 20
+
+
+def _anderweitig_zugeordnet(conn, scenarios: list[Scenario]) -> set[str]:
+    """Buchungen, die irgendeine Zeile schon traegt -- samt der Reihe, wo die Zeile eine nimmt.
+
+    Eine Zeile mit Takt nimmt die ganze Reihe (`ledger.reihe`); eine einmalige nur die
+    genannten Buchungen.
+    """
+    from finctl.ledger import reihe as _reihe
+
+    alle = {h for s in scenarios for line in s.lines for h in line.buchungen}
+    mit_reihe = [h for s in scenarios for line in s.lines
+                 if line.frequency != "einmalig" for h in line.buchungen]
+    return alle | (set(_reihe.hashes(conn, mit_reihe)) if mit_reihe else set())
+
+
+def doppelt_gezaehlt(conn, line: Line, f, ohne=frozenset(),
+                     limit: int = DOPPELT_GRENZE) -> list[dict]:
+    """Buchungen, die zu dieser einmaligen Zeile passen und ihr nicht zugeordnet sind.
+
+    "Passt" heisst: dieselbe Kategorie, dasselbe Vorzeichen, ein Betrag nahe dem
+    geplanten (`DOPPELT_BETRAG_ANTEIL`, mindestens `DOPPELT_BETRAG_MINDEST_CENTS`) und ein
+    Buchungsdatum im Monat der Zeile oder `DOPPELT_TAGE_DANEBEN` Tage davor oder danach.
+    Vor dem Messfenster zaehlt keine Messung etwas, also auch keine Doppelung. Hat die
+    Zeile ein Konto, gilt nur dieses. `ohne` sind Buchungen, die eine Zeile schon traegt.
+    """
+    if (f is None or conn is None or line.frequency != "einmalig"
+            or line.kind not in ("betrag", "erwartet") or line.start is None
+            or not line.category_id or not line.amount_cents):
+        return []
+    monat = line.start.replace(day=1)
+    nach = (monat + timedelta(days=32)).replace(day=1)
+    tage = timedelta(days=DOPPELT_TAGE_DANEBEN)
+    von = max(monat - tage, f.von)
+    bis = nach - timedelta(days=1) + tage
+    bedingung = ["t.booking_date BETWEEN ? AND ?", "s.mgmt_category_id = ?"]
+    args: list = [von.isoformat(), bis.isoformat(), line.category_id]
+    if line.account_id:
+        bedingung.append("t.account_id = ?")
+        args.append(line.account_id)
+    rows = conn.execute(
+        f"""SELECT t.dedup_hash, t.booking_date, t.account_id, s.amount_cents,
+                   substr(t.raw_text, 1, 80) AS text, s.mgmt_category_id AS kategorie
+            FROM   transactions t JOIN splits s ON s.transaction_id = t.id
+            WHERE  {' AND '.join(bedingung)}
+            ORDER  BY t.booking_date""", args)
+    geplant = abs(line.amount_cents)
+    spielraum = max(round(geplant * DOPPELT_BETRAG_ANTEIL), DOPPELT_BETRAG_MINDEST_CENTS)
+    traegt = ohne | set(line.buchungen)
+    passend = [dict(r) for r in rows
+               if r["dedup_hash"] not in traegt
+               and _gleiches_vorzeichen(r["amount_cents"], line.amount_cents)
+               and abs(abs(r["amount_cents"]) - geplant) <= spielraum]
+    return passend[:limit]
+
+
+def doppelt_je_zeile(conn, scenarios: list[Scenario], f) -> dict[tuple[str, int], list[dict]]:
+    """Je eingeschaltete einmalige Zeile (Klammer, Nummer), was doppelt zaehlt; ohne Fund fehlt sie.
+
+    Eine ausgeschaltete Klammer zaehlt nichts, also auch nichts doppelt.
+    """
+    if f is None or conn is None:
+        return {}
+    ohne = _anderweitig_zugeordnet(conn, scenarios)
+    out = {}
+    for s in active(scenarios):
+        for i, line in enumerate(s.lines):
+            if (passend := doppelt_gezaehlt(conn, line, f, ohne)):
+                out[(s.id, i)] = passend
+    return out
 
 
 def einmalig_zugeordnet(scenarios: list[Scenario]) -> set[str]:

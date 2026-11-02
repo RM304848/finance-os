@@ -160,7 +160,7 @@ def anteile(cents: int, teilung: dict | None, projekt: Projekt) -> dict[str, int
     t = teilung or {"art": "gleich"}
     art = t.get("art") or "gleich"
     if art not in ARTEN:
-        raise ValueError(f"Unbekannte Aufteilung {art!r}.")
+        raise ValueError(f"Unbekannte Teilung {art!r}.")
     werte = _werte(t, projekt)
     vorzeichen, betrag = (1 if cents >= 0 else -1), abs(cents)
     verteilt = _verteilen(art, betrag, werte, t, projekt)
@@ -171,9 +171,9 @@ def _werte(t: dict, projekt: Projekt) -> dict[str, float]:
     werte = {str(k): float(v) for k, v in (t.get("personen") or {}).items()}
     fremd = [p for p in werte if p not in projekt.personen]
     if fremd:
-        raise ValueError(f"Nicht im Budgettopf: {', '.join(fremd)}.")
+        raise ValueError(f"Nicht in der Themenkasse: {', '.join(fremd)}.")
     if any(v < 0 for v in werte.values()):
-        raise ValueError("Negative Werte gibt es in einer Aufteilung nicht.")
+        raise ValueError("Negative Werte gibt es in einer Teilung nicht.")
     return werte
 
 
@@ -270,7 +270,7 @@ def ausgleichen(daten: Daten, projekt: str, person: str, an: bool,
                 anteil_cents: int, heute: date) -> None:
     p = daten.projekte.get(projekt)
     if p is None or person not in p.personen:
-        raise ValueError("Diese Person gehört nicht zu diesem Budgettopf.")
+        raise ValueError("Dieser Beteiligte gehört nicht zu dieser Themenkasse.")
     if an:
         p.ausgeglichen[person] = {"am": heute.isoformat(), "cents": anteil_cents}
     else:
@@ -283,7 +283,7 @@ def projekt_setzen(daten: Daten, projekt_id: str | None, name: str,
                    personen: list[str]) -> str:
     name = name.strip()
     if not name:
-        raise ValueError("Ein Budgettopf braucht einen Namen.")
+        raise ValueError("Eine Themenkasse braucht einen Namen.")
     fremd = [p for p in personen if p not in daten.personen]
     if fremd:
         raise ValueError(f"Unbekannte Person: {', '.join(fremd)}.")
@@ -293,7 +293,7 @@ def projekt_setzen(daten: Daten, projekt_id: str | None, name: str,
         return projekt_id
     p = daten.projekte.get(projekt_id)
     if p is None:
-        raise ValueError("Unbekannter Budgettopf.")
+        raise ValueError("Unbekannte Themenkasse.")
     raus = [x for x in p.personen if x not in personen]
     genutzt = [z for z in daten.buchungen.values()
                if z.projekt == projekt_id and z.teilung
@@ -326,7 +326,7 @@ def zuordnen(daten: Daten, teile: list[tuple[str, int]], projekt: str | None) ->
     des alten Projekts.
     """
     if projekt is not None and projekt not in daten.projekte:
-        raise ValueError("Unbekannter Budgettopf.")
+        raise ValueError("Unbekannte Themenkasse.")
     for schluessel in teile:
         alt = daten.buchungen.get(schluessel)
         if projekt is None:
@@ -341,7 +341,7 @@ def teilung_setzen(daten: Daten, schluessel: tuple[str, int], teilung: dict | No
     """Eine eigene Teilung setzen (`None` = wieder gleich). Gibt die Anteile zurueck."""
     zu = daten.buchungen.get(schluessel)
     if zu is None:
-        raise ValueError("Die Buchung gehört zu keinem Budgettopf.")
+        raise ValueError("Die Buchung gehört zu keiner Themenkasse.")
     if teilung and not daten.projekte[zu.projekt].personen:
         raise ValueError("Ein Projekt ohne Personen wird nicht geteilt.")
     ergebnis = anteile(cents, teilung, daten.projekte[zu.projekt])

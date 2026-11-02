@@ -21,9 +21,11 @@ from starlette.responses import RedirectResponse
 
 import finctl as _finctl
 from finctl import module as _module
+from finctl import notizen as _notizen
 from finctl import pfade as _p
 from finctl.forecast.herkunft import prozent
 from finctl.ledger import db as ledger
+from finctl.web import vorschlaege as _vorschlaege
 
 # Weitergereicht, nicht selbst gebildet: `server.py` haelt die alten Namen
 # erreichbar, damit die Aufteilung in Router keine Aufruferaenderung erzwingt.
@@ -113,6 +115,8 @@ TEMPLATES.env.globals["version"] = _finctl.__version__
 # `aktive_module` einmal je Seite, `seite_an` je Link mit dieser Menge.
 TEMPLATES.env.globals["aktive_module"] = _module.aktive
 TEMPLATES.env.globals["seite_an"] = _module.seite_an
+# Die Zahl offener Vorschlaege einer KI steht in der Navigation (ADR 0002).
+TEMPLATES.env.globals["offene_vorschlaege"] = _vorschlaege.anzahl
 TEMPLATES.env.filters["euro"] = euro
 TEMPLATES.env.filters["betrag"] = betrag
 TEMPLATES.env.filters["prozent"] = prozent
@@ -131,6 +135,17 @@ def vorzeichen(cents) -> str:
 
 
 TEMPLATES.env.filters["vz"] = vorzeichen
+
+
+def stueck(vorlage: str, **kontext) -> str:
+    """Ein Stück Seite, gerendert aus derselben Vorlage, die die Seite einbindet.
+
+    Skripte setzen Tabellenzeilen und Editoren nicht selbst zusammen
+    (docs/design_conventions.yaml, html-vom-server): die Schnittstelle liefert
+    das fertige Stück als `html`, das Skript setzt es ein. Die Seite bindet
+    dieselbe Vorlage mit `{% include %}` ein, sodass beide gleich aussehen.
+    """
+    return TEMPLATES.get_template(vorlage).render(**kontext)
 
 
 def adresse(request, pfad: str | None = None, **setzen) -> str:
@@ -283,3 +298,34 @@ def _slug(text: str) -> str:
     while "--" in out:
         out = out.replace("--", "-")
     return out or "szenario"
+
+
+def notiz_felder(eintrag, alt=()) -> dict:
+    """Die Notiz eines Eintrags fuer eine Seite: `notiz` und `notiz_vom`.
+
+    Das Datum fehlt, wo die Notiz aus der Zeit vor den Notizen stammt; die Seite
+    sagt dann „ohne Datum“ (`_notiz.html`).
+    """
+    n = _notizen.lesen(eintrag, alt)
+    return {"notiz": n.text, "notiz_vom": n.vom}
+
+
+#: Wie viele Zeichen der Notiz die Rückfrage beim Entfernen zeigt: genug, um sie wiederzuerkennen.
+NOTIZ_ANFANG = 60
+
+
+def notiz_geht_mit(text) -> str:
+    """Der Satz der Rückfrage beim Entfernen: die Notiz geht mit, hier ihr Anfang.
+
+    Leer, wo der Eintrag keine Notiz hat. Der Anfang endet an einer Wortgrenze; ein
+    Zeilenumbruch wird zum Leerzeichen, damit der Dialog eine Zeile zeigt.
+    """
+    anfang = " ".join(str(text or "").split())
+    if not anfang:
+        return ""
+    if len(anfang) > NOTIZ_ANFANG:
+        anfang = anfang[:NOTIZ_ANFANG].rsplit(" ", 1)[0].rstrip(" ,.;:") + " …"
+    return f"Die Notiz geht mit: „{anfang}“"
+
+
+TEMPLATES.env.filters["notiz_geht_mit"] = notiz_geht_mit

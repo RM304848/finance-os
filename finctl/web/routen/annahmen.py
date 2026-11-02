@@ -1,4 +1,4 @@
-"""Annahmen, ihr Abschnitt Prognosebasis und die Stellschrauben dahinter.
+"""Annahmen, die Fortschreibung und die Stellschrauben dahinter.
 
 Auch `/api/setting`: was hier gesetzt wird, sind Annahmen, keine Einstellungen
 der Oberflaeche.
@@ -19,7 +19,6 @@ from finctl.web.basis import (
     TEMPLATES,
     conn,
     lies_texte,
-    umleiten,
 )
 
 router = APIRouter()
@@ -35,8 +34,13 @@ STELLSCHRAUBEN = (
     ("rendite_nominal_pa", "Rendite Tagesgeld, langfristig", "prozent",
      "Ziele, vor Steuer. Gilt, wo unten für ein Konto kein Zinssatz steht."),
     ("rendite_depot_pa", "Rendite Depot und Policen (vor Steuern)", "prozent",
-     ("Ziele. Alles über dem Tagesgeld-Ziel fließt ins Depot. "
-      "Steuer 26,375 %, ohne Teilfreistellung.")),
+     ("Ziele. Alles über dem Tagesgeld-Ziel fließt ins Depot, ohne Teilfreistellung.")),
+    ("steuersatz_kapital", "Steuersatz auf Kapitalerträge", "prozent",
+     ("Ziele. Gilt für Zinsen, Vorabpauschale und Verkaufsgewinne über dem "
+      "Sparerpauschbetrag; Abgeltungsteuer mit Soli und gegebenenfalls Kirchensteuer.")),
+    ("basiszins_pa", "Basiszins für die Vorabpauschale", "prozent",
+     ("Ziele. Das Bundesfinanzministerium nennt ihn jedes Jahr; "
+      "er bestimmt, wie viel vom Depotwert gilt.")),
     ("sparerpauschbetrag_cents", "Sparerpauschbetrag", "euro",
      ("Ziele. So viel Zinsen, Vorabpauschale und Verkaufsgewinne bleiben im Jahr "
       "steuerfrei; bei Zusammenveranlagung der doppelte.")),
@@ -81,6 +85,24 @@ def _renten() -> list[tuple]:
     return aus
 
 
+def _feldtext(einheit: str, wert) -> str:
+    """Der Wert einer Stellschraube, wie ihr Feld ihn zeigt.
+
+    Ein Prozentsatz mit zwei Stellen, ausser er braucht mehr (26,375 %): Ein Feld, das auf
+    zwei Stellen rundet, schriebe beim Speichern einen anderen Satz in die Datei, auch ohne dass
+    jemand etwas getippt hat.
+    """
+    from finctl.web.basis import betrag
+
+    if einheit == "prozent":
+        prozent = float(wert) * 100
+        text = f"{prozent:.2f}"
+        if abs(float(text) - prozent) > 1e-9:
+            text = f"{prozent:.6f}".rstrip("0")
+        return text.replace(".", ",")
+    return str(wert) if einheit in ("jahre", "monat") else betrag(wert)
+
+
 @router.get("/annahmen", response_class=HTMLResponse)
 def annahmen(request: Request):
     """Die Zahlen, an denen der ganze Plan haengt.
@@ -91,15 +113,20 @@ def annahmen(request: Request):
     ueberschreiben, weil sie neben der Inflationsrate steht.
     """
     from finctl import assumptions as _ann
+    from finctl import notizen as _notizen
+    from finctl.dateien import yaml_lesen
     from finctl.forecast import jahre as _jm
 
     _ann.reset_cache()
+    notizen = _notizen.bereiche(yaml_lesen(_ann.PATH) if _ann.PATH.exists() else {})
     dreh = []
     for key, label, einheit, wirkung in STELLSCHRAUBEN:
         wert = _ann.get(*_ann.UEBERSCHREIBBAR[key],
                         default=_ann.VORGABEN.get(key, "" if einheit == "monat" else 0))
+        notiz = notizen.get(".".join(_ann.UEBERSCHREIBBAR[key]), _notizen.Notiz())
         dreh.append({"key": key, "label": label, "einheit": einheit,
-                     "wirkung": wirkung, "wert": wert})
+                     "wirkung": wirkung, "wert": wert, "text": _feldtext(einheit, wert),
+                     "notiz": notiz.text, "notiz_vom": notiz.vom})
 
     c = conn()
     try:
@@ -140,7 +167,7 @@ def annahmen(request: Request):
         "zinssaetze": _zs.zeilen(), "zinskonten": _tagesgeldkonten(),
         "zinsen_ohne_wirkung": _zinszeilen_ohne_wirkung(),
         "median": median, "median_monate": monate,
-        **_prognosebasis(),
+        "treffer": _treffer(),
     })
 
 
@@ -347,7 +374,7 @@ def _fluss_verweis(p, block: str, fenster) -> str:
     if block == "objekt" and v:
         return f"/immobilie/{v}"      # dort steht die Prognose des Objekts
     if fenster is None:
-        return "/annahmen#prognosebasis"
+        return "/prognosebasis"
     return (f"/transactions?block={block}&start={fenster.von.isoformat()}"
             f"&end={fenster.bis.isoformat()}")
 
@@ -357,7 +384,7 @@ def _fluss_prognose(r, namen: dict, fenster=None) -> dict:
 
     Die Frage dahinter: aus welchen Gruenden verschwindet das Geld? Ein Plan
     oder ein Kredit steht deshalb mit Namen da und fuehrt zu der Stelle, an
-    der man ihn aendert; Gemessenes (Prognosebasis) und Angenommenes je
+    der man ihn aendert; Gemessenes (Fortschreibung) und Angenommenes je
     Block. Dieselben Posten wie im Rechenweg darueber, keine zweite Rechnung.
     """
     from finctl.web import sankey
@@ -419,39 +446,55 @@ def _fluss_prognose(r, namen: dict, fenster=None) -> dict:
                          link=zu_den_buchungen if fenster else None)
 
 
-def _prognosebasis() -> dict:
-    """Worauf /konten und die Jahresrechnung stehen, je Kategorie.
+def fortschreibung_seite(c):
+    """Die Bloecke der Fortschreibung, je Rechnung die Summe und die Quelle (`quellen.bauen`)."""
+    from finctl import ops
+    from finctl.forecast import jahre as _jm
+    from finctl.forecast import quellen as _qn
 
-    Beide Rechnungen stehen hier nebeneinander, je Kategorie mit der Quelle
-    ihres Werts -- und wer eine Kategorie nicht fortgeschrieben haben
-    will, waehlt sie hier fuer beide ab. Ein Abschnitt auf /annahmen und keine
-    eigene Seite: es ist dieselbe Frage, woraus die Extrapolation rechnet.
+    e = eingaben_der_hochrechnung()
+    # Das erste Jahr, das die Jahresrechnung ganz projiziert: das Basisjahr nur, wenn von
+    # ihm nichts im Bestand steckt.
+    jahr = e.monat.base_year + (1 if e.monat.vergangen else 0)
+    lauf = _jm.rechnen(e, end_year=jahr)
+    return _qn.bauen(c, ops.household_accounts(c, months=12), lauf, jahr)
+
+
+@router.get("/prognosebasis", response_class=HTMLResponse)
+def prognosebasis(request: Request):
+    """Woraus Monatsmodell und Jahresrechnung fortschreiben: je Block eine Zeile.
+
+    Die Seite rechnet nichts. Sie liest die Posten aus den Rechnungen, die /konten und
+    /hochrechnung selbst zeigen (`quellen.bauen`); die Abwahl je Kategorie darunter ist
+    die Handentscheidung, die beide Rechnungen lesen.
     """
     from finctl.forecast import prognosebasis as _pb
+    from finctl.forecast import quellen as _qn
 
     c = conn()
     try:
+        seite = fortschreibung_seite(c)
         v = _pb.vergleich(c)
-        treffer = _treffer_fuer_seite(c)
     finally:
         c.close()
-    return {
-        "v": v, "treffer": treffer,
-        "fenster_text": (f"{_pb.monat_text(v['fenster'].von)}–{_pb.monat_text(v['fenster'].bis)}"
-                         if v["fenster"] else ""),
-    }
+    ohne_zuordnung = _qn.vertraege_ohne_zuordnung()
+    doppelt = [z["kategorie"] for z in v["zeilen"]
+               if z["kategorie"] in ohne_zuordnung and z["schnitt"]]
+    return TEMPLATES.TemplateResponse(request, "prognosebasis.html", {
+        "seite": seite, "v": v, "doppelt": doppelt,
+        "fenster_text": seite.fenster,
+    })
 
 
-@router.get("/prognosebasis")
-def prognosebasis(request: Request):
-    return umleiten(request, "/annahmen", anker="prognosebasis")
-
-
-def _treffer_fuer_seite(c):
+def _treffer():
     """Der Treffer-Check: Prognose vom Vormonat gegen das Ist."""
     from finctl.forecast import treffer as _tr
 
-    ergebnis = _tr.pruefen(c)
+    c = conn()
+    try:
+        ergebnis = _tr.pruefen(c)
+    finally:
+        c.close()
     return ergebnis if ergebnis["monate"] else None
 
 
@@ -624,7 +667,7 @@ async def api_setting(request: Request):
     if fehler:
         return JSONResponse({"error": fehler}, status_code=400)
     if key not in _ann.UEBERSCHREIBBAR:
-        return JSONResponse({"error": "unbekannte Einstellung"}, status_code=400)
+        return JSONResponse({"error": "unbekannte Annahme"}, status_code=400)
 
     # Die Seite schreibt die ganze Datei, `assumptions.yaml`, an den Pfad der Stellschraube.
     # Ein Wert, der schon so gilt (auch der Vorgabewert im Code), aendert sie nicht.

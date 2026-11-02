@@ -509,7 +509,7 @@ def jahre(
         None, "--szenario", help="Weitere Annahmedatei, mehrfach moeglich."),
     json: bool = typer.Option(False, "--json"),
 ) -> None:
-    """Wie viel Prozent von Barista FIRE stehen am Stichtag?
+    """Wie viel Prozent des Ziels mit `im_monatsabschluss` in goals.yaml stehen am Stichtag?
 
     Ein Szenario ist eine Annahmedatei, kein Feature:
 
@@ -537,14 +537,12 @@ def jahre(
     finally:
         _c.close()
     opening = zm.liquid_cents(balances)
-    target = next((int(g.get("cents") or 0) for g in (goals.get("ziele") or [])
-                   if g.get("id") == "barista-fire"), 0)
+    ziel = zm.monatsabschluss_ziel(goals) or {}
+    target = int(ziel.get("cents") or 0)
 
     # Unter welcher Inflation das Ziel gesetzt wurde. Ein Szenario mit anderer
     # Inflation muss es mitskalieren, sonst gewinnt das pessimistische.
-    declared_inflation = next(
-        (float(g.get("inflation_pa", 0.02)) for g in (goals.get("ziele") or [])
-         if g.get("id") == "barista-fire"), 0.02)
+    declared_inflation = float(ziel.get("inflation_pa", 0.02))
 
     laeufe = [("Basis", ann.PATH)] + [(Path(s).stem, s) for s in (szenario or [])]
     conn = _require_db()
@@ -871,23 +869,46 @@ def ort(
 # ------------------------------------------------------------- umstellen
 
 
+def _umstellen_fehler(p: dict) -> None:
+    """Eine Pruefung scheiterte: nichts wurde geschrieben, und wie es weitergeht."""
+    typer.secho("Die Umwandlung wurde nicht geschrieben, eine Prüfung scheiterte:",
+                fg=typer.colors.RED, err=True)
+    for zeile in p["fehler"]:
+        typer.echo(f"  {zeile}", err=True)
+    if any(z.startswith("Tabelle settings") for z in p["fehler"]):
+        typer.echo("Übernimm den Wert oder die Notiz in die Datei der Einstellungen (unter "
+                   "`einstellungen:` und `notizen:`) und lass den Befehl noch einmal laufen, "
+                   "oder verwirf die Zeilen mit `umstellen --tabelle-verwerfen`.", err=True)
+    if p["probe"] is not None:
+        typer.echo("Es wurde keine Kopie geschrieben.", err=True)
+
+
+def _umstellen_tabelle(tabelle: dict) -> None:
+    """Was mit der alten Tabelle `settings` der Datenbank geschah."""
+    for zeile in tabelle["hinweise"]:
+        typer.echo(f"  Datei gilt: {zeile}")
+    for zeile in tabelle["verworfen"]:
+        typer.echo(f"  Verworfen: {zeile}")
+    if tabelle["entfernt"]:
+        typer.echo("Die Tabelle settings ist aus der Datenbank entfernt.")
+
+
 def _umstellen_bericht(p: dict) -> None:
     """Was `finctl umstellen` getan (oder bei --probe getan haette), in Worten."""
     probe = p["probe"] is not None
     zu_tun = p["dateien"]
     paare = p["paare"]
     if p["fehler"]:
-        typer.secho("Die Umwandlung wurde nicht geschrieben, eine Pruefung scheiterte:",
-                    fg=typer.colors.RED, err=True)
-        for zeile in p["fehler"]:
-            typer.echo(f"  {zeile}", err=True)
+        _umstellen_fehler(p)
         return
     if not p["zu_tun"]:
-        typer.secho("Nichts umzustellen: keine Datei traegt Kommentare oder alte Namen, "
-                    "und es gibt keine Seitendatei zum Zusammenlegen.", fg=typer.colors.GREEN)
+        typer.secho("Nichts umzustellen: keine Datei trägt Kommentare oder alte Namen, "
+                    "und es gibt keine Seitendatei zum Zusammenlegen."
+                    + (" Es wurde keine Kopie geschrieben." if probe else ""),
+                    fg=typer.colors.GREEN)
         return
     typer.secho(f"{'Probe: ' if probe else ''}{len(zu_tun)} Dateien "
-                f"{'wuerden umgewandelt' if probe else 'umgewandelt'}.", fg=typer.colors.GREEN)
+                f"{'würden umgewandelt' if probe else 'umgewandelt'}.", fg=typer.colors.GREEN)
     for d in zu_tun:
         weg = f", {d['weggefallen']} weggefallen" if d["weggefallen"] else ""
         umb = "".join(f", {n} {a} -> notiz" for a, n in d["umbenannt"].items())
@@ -898,12 +919,13 @@ def _umstellen_bericht(p: dict) -> None:
             typer.echo(f"  {d['name']}: neu geschrieben")
     for z in paare:
         typer.echo(f"  {z['seite']} in {z['basis']} zusammengelegt: "
-                   f"{z['ueberschrieben']} ueberschriebene Basiswerte in Notizen, "
+                   f"{z['ueberschrieben']} überschriebene Basiswerte in Notizen, "
                    f"{len(z['notizen_zusammen'])} Notizen zusammengelegt")
     if p["sicherung"]:
         typer.echo(f"Gesichert nach {p['sicherung']}")
     if probe:
         typer.echo(f"Umgewandelte Kopie: {Path(p['probe']) / 'config'}")
+    _umstellen_tabelle(p["tabelle"])
     typer.echo(f"Bericht: {p['bericht']}")
 
 
@@ -912,14 +934,19 @@ def umstellen_befehl(
     probe: Path = typer.Option(
         None, "--probe",
         help="Nur ansehen: die umgewandelte Kopie und den Bericht in diesen Ordner schreiben "
-             "(ausserhalb des Datenordners). Der Datenordner bleibt unberuehrt."),
+             "(außerhalb des Datenordners). Der Datenordner bleibt unberührt."),
+    tabelle_verwerfen: bool = typer.Option(
+        False, "--tabelle-verwerfen",
+        help="Zeilen der alten Tabelle settings, die in der Datei der Einstellungen nicht stehen, "
+             "nicht übernehmen: Sie kommen in den Bericht und werden mit der Tabelle entfernt."),
     json: bool = typer.Option(False, "--json"),
 ) -> None:
     """Kommentare in config/ zu Notizen umwandeln (Schritt 5).
 
     Sichert config/ nach archiv/vor_umstellung_<Datum>/, schreibt die Dateien neu und
     legt den Bericht nach notizen/umstellung_<Datum>.md. Scheitert eine Pruefung, wird
-    nichts geschrieben. Ein zweiter Lauf aendert nichts.
+    nichts geschrieben. Ein zweiter Lauf aendert nichts. Mit --probe entsteht eine Kopie
+    nur, wenn es etwas umzustellen gibt und jede Pruefung besteht.
     """
     from finctl import umstellen as _umstellen
 
@@ -930,9 +957,11 @@ def umstellen_befehl(
     sicherung = bericht = None
     try:
         if probe is not None:
-            plan, bericht = _umstellen.probieren(wurzel, probe)
+            plan, bericht = _umstellen.probieren(
+                wurzel, probe, tabelle_verwerfen=tabelle_verwerfen)
         else:
-            plan, sicherung, bericht = _umstellen.ausfuehren(wurzel)
+            plan, sicherung, bericht = _umstellen.ausfuehren(
+                wurzel, tabelle_verwerfen=tabelle_verwerfen)
     except ValueError as fehler:
         typer.secho(str(fehler), fg=typer.colors.RED, err=True)
         raise typer.Exit(1) from fehler
@@ -1733,6 +1762,14 @@ def app_starten() -> None:
     from finctl import starter
 
     starter.main()
+
+
+@app.command()
+def mcp() -> None:
+    """MCP ueber stdin/stdout: ein Modell liest und schlaegt vor. Oeffnet keinen Port."""
+    from finctl.mcp import laufen
+
+    laufen()
 
 
 @app.command()

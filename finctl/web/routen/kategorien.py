@@ -19,7 +19,7 @@ def kategorien(request: Request):
     c = conn()
     try:
         rows = [dict(r) for r in c.execute("""
-            SELECT child.id, child.name, child.active,
+            SELECT child.id, child.name, child.active, child.fixkosten, child.einmalig,
                    parent.id AS parent_id, parent.name AS parent,
                    (SELECT COUNT(*) FROM splits s WHERE s.mgmt_category_id = child.id) AS n
             FROM      mgmt_categories child
@@ -31,11 +31,19 @@ def kategorien(request: Request):
             "AND active=1 ORDER BY sort_order")]
     finally:
         c.close()
+    from finctl import notizen as _notizen
     from finctl.tax.taxonomy import rules_referencing
     for r in rows:
         r["rules"] = rules_referencing(r["id"])
+    from finctl.dateien import yaml_lesen
+    from finctl.web.basis import CONFIG_DIR, notiz_felder
+
+    datei = CONFIG_DIR / "taxonomy.yaml"
+    baum = ((yaml_lesen(datei) or {}).get("management") or {}) if datei.exists() else {}
+    notizen = {kennung: notiz_felder(eintrag) for kennung, eintrag in baum.items()
+               if isinstance(eintrag, dict) and _notizen.lesen(eintrag)}
     return TEMPLATES.TemplateResponse(request, "kategorien.html",
-                                      {"rows": rows, "parents": parents})
+                                      {"rows": rows, "parents": parents, "notizen": notizen})
 
 
 def _blattkennung(name: str) -> tuple[str, str | None]:
@@ -50,6 +58,74 @@ def _blattkennung(name: str) -> tuple[str, str | None]:
     if leaf in _notizen.RESERVIERT:
         return leaf, f"the id {leaf} is reserved for notes"
     return leaf, None
+
+
+def _loeschen(body: dict, apply_now, c):
+    """Eine Kategorie loeschen, woran nichts mehr haengt."""
+    from finctl.tax import taxonomy as tx
+
+    # Deleting outright is only safe when nothing points at the
+    # category. `retire` exists for the other case and demands a target,
+    # because splits that lose their category keep their amount and
+    # leave every report -- the worst of both.
+    cid = body.get("id")
+    if not cid:
+        return JSONResponse({"error": "id required"}, status_code=400)
+    n = c.execute("SELECT COUNT(*) FROM splits WHERE mgmt_category_id = ?",
+                  (cid,)).fetchone()[0]
+    if n:
+        return JSONResponse({
+            "error": f"{n} Buchung{'' if n == 1 else 'en'} hängen noch an "
+                     f"{cid}. Zum Auflösen die Kategorie stilllegen und "
+                     f"ein Ziel angeben -- dann wandern die Buchungen mit.",
+            "splits": n}, status_code=409)
+    using = tx.rules_referencing(cid)
+    if using:
+        return JSONResponse({
+            "error": f"Regeln zeigen noch auf {cid}: {', '.join(using)}. "
+                     f"Ohne Kategorie würde die nächste Kategorisierung "
+                     f"auf einen Fremdschlüsselfehler laufen.",
+            "rules": using}, status_code=409)
+    parent, leaf = cid.split("/", 1)
+    tx.save("management", parent, leaf, None, remove=True)
+    apply_now(c)
+    c.execute("DELETE FROM mgmt_categories WHERE id = ?", (cid,))
+    c.commit()
+    return {"ok": True, "deleted": cid}
+
+
+def _oberkategorie(body: dict, apply_now, c):
+    """Eine neue Oberkategorie ohne Kinder; die Kennung kommt aus dem Namen."""
+    from finctl.tax import taxonomy as tx
+
+    label = (body.get("name") or "").strip()
+    if not label:
+        return JSONResponse({"error": "Name fehlt"}, status_code=400)
+    kennung, fehler = _blattkennung(label)
+    if fehler:
+        return JSONResponse({"error": fehler}, status_code=400)
+    try:
+        tx.oberkategorie_anlegen(kennung, label, str(body.get("art") or ""))
+    except ValueError as grund:
+        return JSONResponse({"error": str(grund)}, status_code=400)
+    apply_now(c)
+    return {"ok": True, "id": kennung}
+
+
+def _merkmale(body: dict, apply_now, c):
+    """Fixkosten und einmalig an einer Subkategorie."""
+    from finctl.tax import taxonomy as tx
+
+    cid = str(body.get("id") or "")
+    if "/" not in cid:
+        return JSONResponse({"error": "id required"}, status_code=400)
+    parent, leaf = cid.split("/", 1)
+    try:
+        tx.merkmale_setzen(parent, leaf, {m: body[m] for m in tx.MERKMALE if m in body})
+    except ValueError as grund:
+        return JSONResponse({"error": str(grund)}, status_code=400)
+    apply_now(c)
+    return {"ok": True}
 
 
 @router.post("/api/category")
@@ -92,6 +168,12 @@ async def api_category(request: Request):
             tx.save("management", parent, leaf, label)
             apply_now(c)
             return {"ok": True, "id": full}
+
+        if action == "add_parent":
+            return _oberkategorie(body, apply_now, c)
+
+        if action == "merkmale":
+            return _merkmale(body, apply_now, c)
 
         if action == "rename":
             cid, label = body.get("id"), (body.get("name") or "").strip()
@@ -140,34 +222,7 @@ async def api_category(request: Request):
             return {"ok": True, "migrated_to": target, "moved_splits": moved}
 
         if action == "delete":
-            # Deleting outright is only safe when nothing points at the
-            # category. `retire` exists for the other case and demands a target,
-            # because splits that lose their category keep their amount and
-            # leave every report -- the worst of both.
-            cid = body.get("id")
-            if not cid:
-                return JSONResponse({"error": "id required"}, status_code=400)
-            n = c.execute("SELECT COUNT(*) FROM splits WHERE mgmt_category_id = ?",
-                          (cid,)).fetchone()[0]
-            if n:
-                return JSONResponse({
-                    "error": f"{n} Buchung{'' if n == 1 else 'en'} hängen noch an "
-                             f"{cid}. Zum Auflösen die Kategorie stilllegen und "
-                             f"ein Ziel angeben -- dann wandern die Buchungen mit.",
-                    "splits": n}, status_code=409)
-            using = tx.rules_referencing(cid)
-            if using:
-                return JSONResponse({
-                    "error": f"Regeln zeigen noch auf {cid}: {', '.join(using)}. "
-                             f"Ohne Kategorie würde die nächste Kategorisierung "
-                             f"auf einen Fremdschlüsselfehler laufen.",
-                    "rules": using}, status_code=409)
-            parent, leaf = cid.split("/", 1)
-            tx.save("management", parent, leaf, None, remove=True)
-            apply_now(c)
-            c.execute("DELETE FROM mgmt_categories WHERE id = ?", (cid,))
-            c.commit()
-            return {"ok": True, "deleted": cid}
+            return _loeschen(body, apply_now, c)
 
         return JSONResponse({"error": f"unknown action {action}"}, status_code=400)
     finally:

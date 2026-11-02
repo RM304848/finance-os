@@ -2,8 +2,9 @@
 {% block title %}Reihen{% endblock %}
 {% from "_auswahl.html" import auswahl %}
 {% block body %}
+{% import "_notiz.html" as nz %}
 <h1>Reihen</h1>
-<p class="zweck">Wie oft jede Zahlung kommt und mit welchem Betrag je Termin.</p>
+<p class="zweck">Wie oft jede Reihe zahlt und mit welchem Betrag je Termin.</p>
 {{ auswahl(request, 'zeige', 'Anzeige', anzeigen, zeige) }}
 <details class="hilfe">
   <summary>Erkannt, festgelegt, einmalig</summary>
@@ -78,7 +79,7 @@
       {% if z.festgelegt %}<button type="button" class="ghost" data-id="{{ z.id }}"
         data-buchung="{{ z.buchung }}" data-zurueck="1" onclick="festlegen(this)">Festlegung zurücknehmen</button>{% endif %}
       <span class="meldung fein"></span>
-      {% if z.notiz_vom %}<span class="muted fein">Notiz vom {{ z.notiz_vom }}</span>{% endif %}</p>
+      {% if z.notiz %}<span class="muted fein">Notiz {{ nz.stand(z.notiz_vom) }}</span>{% endif %}</p>
     {% if z.kandidaten %}
     <div class="zeilen-form">
       <label>Gehört zu<select id="z-{{ z.id }}" data-no-combo>
@@ -104,7 +105,7 @@
       <tr>
         <td class="nobr">{{ t.tag }}</td>
         <td class="num {{ t.cents|vz }}">{{ t.cents|euro }}</td>
-        <td>{% if t.hinweis == 'Ausreißer' %}<span class="pill eigen" title="kommt zusätzlich, zählt nicht zum Takt">Ausreißer</span>
+        <td>{% if t.hinweis == 'Ausreißer' %}<span class="pill eigen" title="kommt zusätzlich, zählt nicht zum Takt">Einmalig</span>
           {%- elif t.hinweis %}<span class="pill" title="vor dem heutigen Betrag">früherer Betrag</span>{% endif %}</td>
         <td class="aktionen">
           {%- for b in t.buchungen %}

@@ -311,16 +311,10 @@ WHERE   NOT EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id)
    OR       EXISTS (SELECT 1 FROM splits s WHERE s.transaction_id = t.id
                                             AND s.mgmt_category_id IS NULL);
 
--- Leer und ungelesen seit Schritt 5, N.3f. Hier standen die im Dashboard gesetzten
--- Stellschrauben und Kontountergrenzen; sie stehen jetzt in config/assumptions.yaml und
--- config/forecast.yaml, mit ihrer Notiz. Die Tabelle bleibt, bis N.4 die Reste raeumt, damit
--- eine Datenbank ihres Standes noch oeffnet.
-CREATE TABLE IF NOT EXISTS settings (
-    key         TEXT PRIMARY KEY,
-    value       TEXT NOT NULL,
-    note        TEXT,
-    updated_at  TEXT NOT NULL
-);
+-- Die Tabelle `settings` gibt es nicht mehr. Stellschrauben und Kontountergrenzen stehen in
+-- config/assumptions.yaml und config/forecast.yaml, mit ihrer Notiz; eine Handentscheidung
+-- lebt nie nur in der Datenbank. Eine Datenbank aelteren Standes kann die Tabelle noch haben,
+-- ungelesen; `finctl umstellen` gleicht sie mit der Datei ab und entfernt sie.
 
 -- Es gibt keine schema_migrations-Tabelle. Sie stand hier und wurde nie
 -- beschrieben: Schemaaenderungen laufen ueber _ADDED_COLUMNS in

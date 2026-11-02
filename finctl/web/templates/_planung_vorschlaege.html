@@ -1,0 +1,6 @@
+{# Die Vorschlagsliste einer Planzeile. `meldung` ersetzt die Zeilen, wenn die
+   Suche nichts zu suchen hat. #}
+<table class="detail" id="bt-{{ zid }}">
+  {% if meldung %}<tr><td class="muted">{{ meldung }}</td></tr>{% endif %}
+  {% for b in kandidaten %}{% include "_planung_buchungszeile.html" %}{% endfor %}
+</table>

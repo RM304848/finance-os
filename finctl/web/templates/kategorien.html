@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block n_kat %}on{% endblock %}
 {% block title %}Kategorien{% endblock %}
 {% block body %}
+{% import "_notiz.html" as nz %}
 {% include "_combo.html" %}
 <h1>Kategorien</h1>
 <p class="zweck">Der Kategorienbaum: anlegen, umbenennen, stilllegen — mit den Regeln je Zeile.</p>
@@ -9,6 +10,7 @@
    unter die geoeffnete Zeile wandert (bearbeitungstabellen). Vorher trug jede
    der sechzig Zeilen ein Namensfeld, eine Zielauswahl und bis zu drei Knoepfe. #}
 <div class="suchzeile" style="justify-content:flex-end">
+  <button type="button" class="ghost" onclick="oeffne('#ober')">Neue Oberkategorie</button>
   <button type="button" onclick="oeffne('')">Neue Subkategorie</button></div>
 
 <div class="wrap"><table class="kategorien">
@@ -22,6 +24,12 @@
       </select></label>
       <label>Name<input id="k-name" placeholder="z.B. Tierarzt"
         onkeydown="if(event.key==='Enter'){event.preventDefault();speichern(document.getElementById('k-speichern'))}"></label>
+      <label id="k-art-feld">Art<select id="k-art" data-no-combo>
+        <option value="expense">Ausgabe</option><option value="income">Einnahme</option></select></label>
+      <label id="k-fix-feld" title="Zählt unter Fixkosten und wird mit zwölf Monaten gemessen"><input
+        type="checkbox" id="k-fix"> Fixkosten</label>
+      <label id="k-einmalig-feld" title="Was hier gebucht ist, kommt nicht wieder und fällt aus der Fortschreibung"><input
+        type="checkbox" id="k-einmalig"> Einmalig</label>
     </div>
     <p class="zeilen-knoepfe">
       <button type="button" id="k-speichern" onclick="speichern(this)">Speichern</button>
@@ -40,7 +48,8 @@
   </td></tr>
   {% for r in rows %}
   <tr id="k-{{ r.id|replace('/', '--') }}" class="klappbar" onclick="oeffne('{{ r.id }}')">
-    <td class="muted">{{ r.parent }}</td>
+    <td class="muted">{{ r.parent }}
+      {%- if loop.changed(r.parent_id) and notizen.get(r.parent_id) %}<div onclick="event.stopPropagation()">{{ nz.zeile(notizen[r.parent_id].notiz, notizen[r.parent_id].notiz_vom) }}</div>{% endif %}</td>
     <td>{{ r.name }}{% if not r.active %} <span class="pill">stillgelegt</span>{% endif %}</td>
     <td class="num {{ '' if r.n else 'muted' }}">{{ r.n }}</td>
     <td class="muted klein">
@@ -68,14 +77,20 @@ function sagen(text, fehler){
 function oeffne(id){
   const panel = document.getElementById('panel');
   if (offen === id && !panel.hidden){ panel.hidden = true; offen = null; return; }
-  const k = id ? KATS[id] : null;
-  if (id && !k) return;
-  const zeile = id ? document.getElementById('k-' + id.replaceAll('/', '--'))
-                   : document.getElementById('kopfzeile');
+  const ober = id === '#ober';
+  const k = id && !ober ? KATS[id] : null;
+  if (id && !ober && !k) return;
+  const zeile = k ? document.getElementById('k-' + id.replaceAll('/', '--'))
+                  : document.getElementById('kopfzeile');
   zeile.after(panel);
-  feld('titel').textContent = k ? k.parent + ' / ' + k.name : 'Neue Subkategorie';
+  feld('titel').textContent = k ? k.parent + ' / ' + k.name
+    : (ober ? 'Neue Oberkategorie' : 'Neue Subkategorie');
   feld('kennung').textContent = k ? k.id : '';
-  feld('parent-feld').hidden = !!k;
+  feld('parent-feld').hidden = !!k || ober;
+  feld('art-feld').hidden = !ober;
+  // Die Merkmale gibt es an einer bestehenden Subkategorie; eine neue beginnt ohne.
+  for (const m of ['fix', 'einmalig']) feld(m + '-feld').hidden = !k;
+  feld('fix').checked = !!(k && k.fixkosten); feld('einmalig').checked = !!(k && k.einmalig);
   feld('name').value = k ? k.name : '';
   feld('speichern').textContent = k ? 'Speichern' : 'Anlegen';
   // Stilllegen nur fuer aktive, Loeschen nur, woran nichts mehr haengt.
@@ -101,11 +116,16 @@ async function call(body){
 async function speichern(knopf){
   const name = feld('name').value.trim();
   if (!name){ feld('name').classList.add('feld-fehlt'); return; }
-  const body = offen ? {action:'rename', id:offen, name}
-                     : {action:'add', parent:feld('parent').value, name};
-  const [res, out] = await call(body);
+  const k = offen && offen !== '#ober' ? KATS[offen] : null;
+  const ober = offen === '#ober';
+  let [res, out] = await call(ober ? {action:'add_parent', name, art:feld('art').value}
+    : (k ? {action:'rename', id:offen, name} : {action:'add', parent:feld('parent').value, name}));
+  // Die Merkmale gehen nur mit, wenn sie sich geaendert haben: Speichern ohne Aenderung schreibt nichts.
+  if (res.ok && k && (feld('fix').checked !== !!k.fixkosten || feld('einmalig').checked !== !!k.einmalig))
+    [res, out] = await call({action:'merkmale', id:offen, fix:feld('fix').checked,
+                             einmalig:feld('einmalig').checked});
   if (!res.ok){ sagen(out.error || 'fehlgeschlagen', true); return; }
-  sagen(offen ? 'umbenannt — wirkt sofort' : out.id + ' angelegt');
+  sagen(k ? 'gespeichert — wirkt sofort' : out.id + ' angelegt');
   setTimeout(() => location.reload(), 700);
 }
 async function retire(knopf){

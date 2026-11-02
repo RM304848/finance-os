@@ -20,6 +20,7 @@ from finctl.web.basis import (
     TEMPLATES,
     _slug,
     conn,
+    notiz_felder,
 )
 
 router = APIRouter()
@@ -55,6 +56,11 @@ def ziele(request: Request):
     * The salary floor is a planning input, not a target, and now lives with
       the scenarios.
     """
+    return TEMPLATES.TemplateResponse(request, "ziele.html", ziele_kontext())
+
+
+def ziele_kontext() -> dict:
+    """Was die Seite Ziele zeigt: Karten, Kreuzung, Tempi. Auch der MCP-Zugang liest es."""
     goals = _ziele.aus_spec(_lesen(DATEI))
     today = date.today()
     c = conn()
@@ -110,15 +116,14 @@ def ziele(request: Request):
     arten = _basis_arten(merged)
     _basis_beschriften(targets, merged, arten, kontenamen)
     fenster = je_tempo["schnitt"].monat.fenster
-    return TEMPLATES.TemplateResponse(request, "ziele.html",
-                                      {"targets": targets, "kreuzung": kreuzung,
-                                       "horizont_jahr": lauf.years[-1].year,
-                                       "basis_arten": arten,
-                                       "tempo_schnitt": _jm.tempo_text("schnitt", fenster),
-                                       "tempo_juengst": _jm.tempo_text("juengst", fenster),
-                                       # Die Rentenluecke ist immer ein Ziel;
-                                       # ohne Geburtsdatum sagt die Seite, was fehlt.
-                                       "rentenluecke_fehlt": luecke is None})
+    return {"targets": targets, "kreuzung": kreuzung,
+            "horizont_jahr": lauf.years[-1].year,
+            "basis_arten": arten,
+            "tempo_schnitt": _jm.tempo_text("schnitt", fenster),
+            "tempo_juengst": _jm.tempo_text("juengst", fenster),
+            # Die Rentenluecke ist immer ein Ziel;
+            # ohne Geburtsdatum sagt die Seite, was fehlt.
+            "rentenluecke_fehlt": luecke is None}
 
 
 def _karte(prog, goals: dict, luecke, today: date, zweite) -> dict:
@@ -131,7 +136,7 @@ def _karte(prog, goals: dict, luecke, today: date, zweite) -> dict:
     declared = next((g for g in (goals.get("ziele") or [])
                      if g.get("id") == prog.goal_id), {})
     return {
-        "id": prog.goal_id, "notiz": declared.get("notiz") or "",
+        "id": prog.goal_id, **notiz_felder(declared),
         "fest": bool(declared.get("fest")),
         "rechenweg": luecke.rechenweg if declared.get("fest") and luecke else [],
         "name": prog.name, "have": prog.have_cents,

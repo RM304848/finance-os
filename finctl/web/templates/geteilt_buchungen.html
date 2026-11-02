@@ -4,7 +4,7 @@
 {% block body %}
 {% include "_combo.html" %}
 <h1>Buchungen zuordnen <span class="muted zusatz">— {{ rows|length }}{% if gesamt > rows|length %} von {{ gesamt }}{% endif %}</span></h1>
-<p class="zweck">Welche Ausgaben gehören zu welchem Budgettopf, und wer trägt welchen Teil?</p>
+<p class="zweck">Welche Ausgaben gehören zu welcher Themenkasse, und wer trägt welchen Teil?</p>
 
 <form method="get" class="card">
   {% from "_auswahl.html" import auswahl %}
@@ -16,22 +16,22 @@
       {% for k in konten %}<option value="{{ k }}" {{ 'selected' if f.konto == k }}>{{ k }}</option>{% endfor %}</select></label>
     <label>Kategorie<select name="kategorie" data-no-combo><option value="">alle</option>
       {% for kid, name in kategorienamen.items() %}<option value="{{ kid }}" {{ 'selected' if kid in f.kategorie }}>{{ name }}</option>{% endfor %}</select></label>
-    <label>Budgettopf<select name="projekt" data-no-combo><option value="">alle</option>
+    <label>Themenkasse<select name="projekt" data-no-combo><option value="">alle</option>
       {% for p in projekte.values() %}<option value="{{ p.id }}" {{ 'selected' if f.projekt == p.id }}>{{ p.name }}</option>{% endfor %}</select></label>
     <label>Suche<input name="q" value="{{ f.q }}" placeholder="Text…"></label>
   </div>
   <p class="zeilen-knoepfe">
-    <label><input type="checkbox" name="ohne" value="1" {{ 'checked' if f.ohne }}> nur ohne Budgettopf</label>
+    <label><input type="checkbox" name="ohne" value="1" {{ 'checked' if f.ohne }}> nur ohne Themenkasse</label>
     <label><input type="checkbox" name="alle_richtungen" value="1" {{ 'checked' if f.alle_richtungen }}> auch Eingänge</label>
     <button>Filtern</button> <a class="plain" href="/geteilt/buchungen">zurücksetzen</a></p>
 </form>
 
 {% if not projekte %}
-<div class="note">Noch kein Budgettopf. Unter Budgettöpfe einen anlegen, dann hier zuordnen.</div>
+<div class="note">Noch keine Themenkasse. Unter Themenkassen eine anlegen, dann hier zuordnen.</div>
 {% endif %}
 
 <p class="zeilen-knoepfe">
-  <select id="sammel-projekt" data-no-combo><option value="">Budgettopf wählen …</option>
+  <select id="sammel-projekt" data-no-combo><option value="">Themenkasse wählen …</option>
     {% for p in projekte.values() %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select>
   <button type="button" onclick="sammeln(this, document.getElementById('sammel-projekt').value)">Markierte zuordnen</button>
   <button type="button" class="ghost" onclick="sammeln(this, null)">Zuordnung lösen</button>
@@ -40,7 +40,7 @@
 <div class="wrap"><table>
   <tr><th><input type="checkbox" aria-label="alle markieren" onchange="document.querySelectorAll('.wahl').forEach(x => x.checked = this.checked)"></th>
       <th>Datum</th><th>Konto</th><th class="num">Betrag</th><th>Text</th><th>Kategorie</th>
-      <th style="width:200px">Budgettopf</th><th></th></tr>
+      <th style="width:200px">Themenkasse</th><th></th></tr>
   {% for r in rows %}{% set p = projekte.get(r.projekt) %}
   <tr id="z-{{ loop.index }}" data-buchung="{{ r.dedup_hash }}" data-teil="{{ r.seq }}">
     <td><input type="checkbox" class="wahl" aria-label="markieren"></td>
@@ -61,7 +61,7 @@
   <tr class="panel" id="panel-{{ loop.index }}" hidden><td colspan="8">
     <div class="teilung" data-zeile="{{ loop.index }}">
       <div class="zeilen-form">
-        <label>Aufteilung<select class="t-art" data-no-combo onchange="vorschau(this)">
+        <label>Teilung<select class="t-art" data-no-combo onchange="vorschau(this)">
           {% for art, name in [('gleich', 'gleich'), ('betrag', 'feste Beträge €'), ('prozent', 'Prozent'), ('gewicht', 'Gewichte'), ('nur-ich', 'nur ich')] %}
           <option value="{{ art }}" {{ 'selected' if (t.art or 'gleich') == art }}>{{ name }}</option>{% endfor %}
         </select></label>
@@ -112,7 +112,7 @@ document.querySelectorAll('.projektwahl').forEach(feld => {
 async function sammeln(knopf, projekt){
   const teile = [...document.querySelectorAll('.wahl:checked')].map(x => schluessel(x.closest('tr')));
   if (!teile.length){ melden(knopf, 'nichts markiert', true); return; }
-  if (projekt === '') { melden(knopf, 'Budgettopf wählen', true); return; }
+  if (projekt === '') { melden(knopf, 'Themenkasse wählen', true); return; }
   try {
     await senden('/api/geteilt/zuordnen', {teile, projekt});
     melden(knopf, 'gespeichert — neu rechnen …', false);
@@ -161,7 +161,7 @@ async function teilungSpeichern(knopf, gleich){
 
 {% import "_konfig.html" as kf %}
 {{ kf.fuss([
-  ('config/geteilt_custom.yaml', 'Welcher Teil welcher Buchung zu welchem Budgettopf gehört, mit Teilung.'),
+  ('config/geteilt_custom.yaml', 'Welcher Teil welcher Buchung zu welcher Themenkasse gehört, mit Teilung.'),
   ('finctl/web/templates/geteilt_buchungen.html', 'Die Texte dieser Seite.'),
 ], handbuch='geteilt-buchungen') }}
 {% endblock %}

@@ -1,16 +1,16 @@
-"""Worauf die beiden Prognosen stehen -- je Kategorie, nebeneinander.
+"""Worauf die beiden Prognosen stehen -- je Kategorie, nebeneinander -- und die Abwahl.
+
+Die Seite /prognosebasis zeigt je Block die Quelle (`quellen.py`) und von diesem Modul die
+Abwahl je Kategorie.
 
 Zwei Rechnungen, eine Basis. /konten und die Jahresrechnung messen dieselben
 zwoelf Monate und nehmen die Zwoelfmonatssumme je Kategorie; /konten teilt sie
 durch zwoelf und bucht sie auf dem Konto, auf dem gemessen wurde.
 
-Hier steht je Kategorie: die gemessenen Monate, was /konten daraus macht, was
-die Jahresrechnung daraus macht, und woher der Wert kommt, wo er nicht aus der
-Messung stammt (Vertrag, Planzeile, Annahme, gerechnet). Beide Spalten zaehlen,
-was die Rechnung zaehlt: bleibt von der Messung nichts, weil ein Vertrag, eine
-erwartete Einnahme oder die Objektprognose ihre Buchungen ersetzt, stehen dessen
-Posten da (`_ersetzt`). Ein Delta, das ueber die Rundung hinausgeht, hat dann nur
-noch einen dauerhaften Grund (`dauerhaft`: eine Regel, die nur /konten kennt).
+Hier steht je Kategorie: die gemessenen Monate, was /konten daraus macht und was
+die Jahresrechnung daraus macht. Beide Spalten zaehlen, was die Rechnung zaehlt:
+bleibt von der Messung nichts, weil ein Vertrag, eine erwartete Einnahme oder die
+Objektprognose ihre Buchungen ersetzt, stehen dessen Posten da (`_ersetzt`).
 
 NICHT FORTSCHREIBEN wirkt in beiden Rechnungen. Eine Schenkung, die in zwei von
 zwoelf Monaten kam, schrieb die Jahresrechnung als 367 im Monat fort -- ein
@@ -32,10 +32,10 @@ from finctl.pfade import CONFIG_DIR
 DATEI = "prognosebasis_custom.yaml"
 SCHLUESSEL = "nicht_fortschreiben"
 
-KOPF = """# Unter Prognosebasis (/annahmen) abgewaehlte Kategorien.
+KOPF = """# Unter Fortschreibung (/prognosebasis) abgewaehlte Kategorien.
 #
 # Eine Kategorie hier wird in KEINER Prognose fortgeschrieben -- weder auf
-# /konten noch in der Jahresrechnung (/annahmen, /ziele). Gemessen und im
+# /konten noch in der Jahresrechnung (/hochrechnung, /ziele). Gemessen und im
 # Abgleich gezeigt wird sie weiter.
 #
 # Gedacht fuer Unregelmaessiges, das zufaellig im Messfenster lag: eine
@@ -46,10 +46,6 @@ KOPF = """# Unter Prognosebasis (/annahmen) abgewaehlte Kategorien.
 #: Mindestens so viele Monate mit Buchungen, sonst gilt eine Kategorie als
 #: unregelmaessig -- sofern sie keine Fixkosten sind, die jaehrlich kommen.
 REGELMAESSIG_AB = 6
-
-#: Bis hierhin gilt eine Differenz je Kategorie als Rundung: /konten rundet die
-#: Monatsrate je Konto auf den Cent, die Jahresrechnung einmal auf der Summe.
-RUNDUNG_CENTS = 5
 
 
 def nicht_fortschreiben() -> set[str]:
@@ -99,9 +95,7 @@ def _konten_je_kategorie(conn: sqlite3.Connection) -> tuple[dict[str, int], dict
     """
 
     from finctl import abos as _ab
-    from finctl.forecast import jahre as jm
     from finctl.forecast import konten as ops
-    from finctl.forecast import szenarien as _sz
 
     fcfg = ops.forecast_config()
     abos = _ab.alle_vertraege()
@@ -119,27 +113,11 @@ def _konten_je_kategorie(conn: sqlite3.Connection) -> tuple[dict[str, int], dict
             summe[kategorie] = (summe.get(kategorie, 0.0)
                                 + item.amount_cents / (item.every_months or 1))
     overrides = ops._income_overrides(fcfg, ops._erster_offener_monat(conn).year)
-    return {k: round(v) for k, v in summe.items()}, {
-        "fcfg": fcfg, "overrides": overrides,
-        "abo_kategorien": {a["kategorie"] for a in abos if a.get("kategorie")},
-        # Eine erwartete Einnahme ersetzt die Messung ihrer Kategorie in beiden Rechnungen.
-        "erwartet": {line.category_id for s in _sz.active(jm._szenarien_laden())
-                     for line in s.lines if line.kind == "erwartet" and line.category_id},
-        # Ein Vertrag ohne eine einzige zugeordnete Buchung kann seine Reihe
-        # nicht aus der Messung nehmen -- er weiss ja nicht, welche sie ist.
-        # Dann steht sein Beitrag zweimal da, und das muss jemand sagen.
-        "ohne_zuordnung": {a["kategorie"] for a in abos
-                           if a.get("kategorie") and not a["buchungen"]}}
-
-
-#: Zinsen und Kapitalertragsteuer schreibt keine der beiden Rechnungen fort, sie rechnen
-#: sie: Stand mal Zinssatz je Konto, Steuer nach dem Sparerpauschbetrag.
-GERECHNET_GRUND = ("beide Rechnungen: nicht fortgeschrieben, gerechnet — "
-                   "Stand mal Zinssatz je Konto, Steuer nach Sparerpauschbetrag")
+    return {k: round(v) for k, v in summe.items()}, {"overrides": overrides}
 
 
 def vergleich(conn: sqlite3.Connection) -> dict:
-    """Je Kategorie: gemessen, /konten, Jahresrechnung, dazu die Quelle des Werts (`grund`)."""
+    """Je Kategorie: gemessen, /konten und Jahresrechnung."""
     from finctl import assumptions as ann
     from finctl.forecast import abgleich as ag
     from finctl.forecast import engine as fc
@@ -162,8 +140,6 @@ def vergleich(conn: sqlite3.Connection) -> dict:
 
     konten, kontext = _konten_je_kategorie(conn)
     ersetzt = _ersetzt(conn, geladen)
-    fcfg = kontext["fcfg"]
-    ausgeschlossen_konten = set(fcfg.get("exclude_from_recurring") or [])
     fixkosten = {r[0] for r in conn.execute(
         "SELECT id FROM mgmt_categories WHERE fixkosten = 1")}
     namen = {r["id"]: r["name"] for r in conn.execute(
@@ -211,11 +187,6 @@ def vergleich(conn: sqlite3.Connection) -> dict:
             "schnitt": round(sum(werte.values()) / f.monate),
             "konten": konto_wirksam, "jahr": jahr_wirksam,
             "konten_roh": konto, "jahr_roh": jahr,
-            "delta": ((jahr_wirksam or 0) - (konto_wirksam or 0)),
-            "dauerhaft": kategorie in ausgeschlossen_konten,
-            "grund": GERECHNET_GRUND if kategorie in jm.GERECHNET else _grund(
-                kategorie, block, konto, jahr, abgewaehlt, ausgeschlossen_konten,
-                kontext),
             "unregelmaessig": unregelmaessig, "abgewaehlt": abgewaehlt,
             "abwaehlbar": block in jm.FROM_BASE,
         })
@@ -294,8 +265,6 @@ def _objektzeilen(ersetzt: dict, monate: int) -> list[dict]:
         "kategorie": f"{name} (Objektprognose)", "name": name, "block": _ag.OBJEKT,
         "werte": [0] * monate, "mit_buchung": 0, "schnitt": 0,
         "konten": netto, "jahr": netto, "konten_roh": netto, "jahr_roh": netto,
-        "delta": 0, "dauerhaft": False,
-        "grund": "Objektprognose (Immobilien): beide Rechnungen nehmen sie statt der Messung",
         "unregelmaessig": False, "abgewaehlt": False, "abwaehlbar": False}
         for name, netto in ersetzt["objekte"].values()]
 
@@ -306,59 +275,6 @@ def _block_fuer(conn: sqlite3.Connection, kategorie: str) -> str | None:
     from finctl.forecast import abgleich as ag
 
     return ag.block_der_kategorie(conn, kategorie)
-
-
-def _grund_vertrag(konto, ohne_zuordnung: bool) -> str:
-    """Warum eine Kategorie mit Vertrag auf /konten so dasteht, wie sie dasteht.
-
-    Drei Faelle, und zwei davon waren frueher stumm. Ein Vertrag nimmt SEINE
-    Reihe aus der Messung, nicht die ganze Kategorie: was daneben liegt --
-    eine Erstattung, ein zweiter Anbieter -- bleibt gemessen und gehoert auch
-    dorthin. Ohne eine zugeordnete Buchung kennt er seine Reihe aber nicht und
-    steht neben ihr statt an ihrer Stelle. Ohne diese Saetze stand die
-    Restzahl da, als erklaere sie sich selbst.
-    """
-    if ohne_zuordnung:
-        return ("Vertrag ohne zugeordnete Buchung: zählt doppelt, solange "
-                "seine Buchungen in der Messung stehen — eine genügt")
-    if konto is None:
-        return "Vertrag mit Termin in beiden Rechnungen, nicht aus der Messung"
-    return ("Vertrag mit Termin für seine Reihe; was daneben in der "
-            "Kategorie liegt, bleibt gemessen")
-
-
-#: Der Grund einer Differenz, der nur am Block der Kategorie hängt.
-_GRUND_JE_BLOCK = {
-    "kredit": "Kreditraten kommen in beiden Rechnungen aus dem Tilgungsplan",
-    "investment": "Umschichtung, keine Ausgabe: in beiden Rechnungen nicht fortgeschrieben",
-    _ag.EINMALIG: "eigene Quelle: Planung bzw. Annahme, nicht die Messung",
-    _ag.OBJEKT: "ersetzt durch die Objektprognose (Immobilien), nicht die Messung",
-}
-
-
-def _grund(kategorie, block, konto, jahr, abgewaehlt, ausgeschlossen_konten,
-           kontext) -> str:
-    if abgewaehlt:
-        return "abgewählt: in keiner Prognose fortgeschrieben"
-    if block in _GRUND_JE_BLOCK:
-        return _GRUND_JE_BLOCK[block]
-    if kategorie in kontext["erwartet"]:
-        return ("erwartete Einnahme in Planung: ersetzt die Messung in beiden Rechnungen, "
-                "die Zeile zählt voll")
-    if kategorie == "einkommen/gehalt":
-        return ("Untergrenze statt Messung: beide Rechnungen rechnen vorsichtig mit der "
-                "Gehalts-Untergrenze aus den Annahmen")
-    if kategorie in kontext["overrides"]:
-        return "fest aus forecast.yaml (overrides): ersetzt die Messung"
-    if kategorie in ausgeschlossen_konten:
-        return "in forecast.yaml ausgeschlossen: /konten schreibt nicht fort"
-    if kategorie in kontext["abo_kategorien"]:
-        return _grund_vertrag(konto, kategorie in kontext["ohne_zuordnung"])
-    if konto is None:
-        return "/konten schreibt diese Kategorie auf keinem Konto fort"
-    if jahr is not None and abs(konto - jahr) <= RUNDUNG_CENTS:
-        return "gleiche Basis: Summe von zwölf Monaten; /konten rundet je Konto auf den Cent"
-    return ""
 
 
 def monat_text(d: date) -> str:

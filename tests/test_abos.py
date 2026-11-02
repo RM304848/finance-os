@@ -59,7 +59,7 @@ def test_a_declared_subscription_lands_on_its_due_month_not_as_a_twelfth():
 def test_nothing_is_due_after_the_cancellation():
     termine = abos.posten([_abo(takt=1, faellig="2026-10-01",
                                 gekuendigt_zum="2026-12-31")], "a",
-                          ab=date(2026, 9, 1), bis=date(2027, 6, 30))
+                          ab=date(2026, 10, 1), bis=date(2027, 6, 30))
     assert [t["faellig"] for t in termine] == [
         date(2026, 10, 1), date(2026, 11, 1), date(2026, 12, 1)]
 
@@ -68,6 +68,64 @@ def test_a_prepaid_stock_charges_nothing_before_it_runs_out():
     termine = abos.posten([_abo(faellig="2028-04-05", vorrat_bis="2028-04-05")], "a",
                           ab=date(2026, 9, 1), bis=date(2028, 12, 31))
     assert [t["faellig"] for t in termine] == [date(2028, 4, 5)]
+
+
+def _tage(abo, ab, bis):
+    return [(t.year, t.month, t.day) for t in abos.termine(abo, ab=ab, bis=bis)]
+
+
+def test_a_due_date_at_the_end_of_the_month_stays_at_the_end_of_the_month():
+    # Der 31. fiel einmal in den Februar und blieb danach am 28.: Jetzt rechnet jeder Termin
+    # fuer sich vom erklaerten aus.
+    a = _abo(takt=1, faellig="2027-01-31")
+    assert _tage(a, date(2027, 1, 1), date(2027, 5, 31)) == [
+        (2027, 1, 31), (2027, 2, 28), (2027, 3, 31), (2027, 4, 30), (2027, 5, 31)]
+    assert _tage(a, date(2028, 2, 1), date(2028, 3, 31)) == [(2028, 2, 29), (2028, 3, 31)]
+
+
+def test_the_declared_day_holds_backwards_too():
+    # `faellig` ist der NAECHSTE Termin: Die Termine davor rechnen ebenfalls vom erklaerten
+    # aus, nicht vom Nachfolger, der in einem kurzen Monat gekappt wurde.
+    a = _abo(takt=1, faellig="2027-03-31")
+    assert _tage(a, date(2026, 12, 1), date(2027, 3, 31)) == [
+        (2026, 12, 31), (2027, 1, 31), (2027, 2, 28), (2027, 3, 31)]
+
+
+def test_a_window_that_starts_several_beats_before_the_due_date_holds_every_due_date():
+    a = _abo(takt=1, faellig="2027-06-15")
+    assert _tage(a, date(2027, 1, 1), date(2027, 8, 31)) == [
+        (2027, m, 15) for m in range(1, 9)]
+    a = _abo(takt=3, faellig="2027-12-31")
+    assert _tage(a, date(2026, 1, 1), date(2027, 12, 31)) == [
+        (2026, 3, 31), (2026, 6, 30), (2026, 9, 30), (2026, 12, 31),
+        (2027, 3, 31), (2027, 6, 30), (2027, 9, 30), (2027, 12, 31)]
+    a = _abo(takt=12, faellig="2029-02-28")
+    assert _tage(a, date(2026, 1, 1), date(2029, 12, 31)) == [
+        (2026, 2, 28), (2027, 2, 28), (2028, 2, 28), (2029, 2, 28)]
+
+
+def test_the_quarterly_and_the_yearly_beat_keep_their_day_across_short_months():
+    a = _abo(takt=3, faellig="2027-01-30")
+    assert _tage(a, date(2027, 1, 1), date(2028, 1, 31)) == [
+        (2027, 1, 30), (2027, 4, 30), (2027, 7, 30), (2027, 10, 30), (2028, 1, 30)]
+    a = _abo(takt=12, faellig="2028-02-29")
+    assert _tage(a, date(2026, 1, 1), date(2032, 12, 31)) == [
+        (2026, 2, 28), (2027, 2, 28), (2028, 2, 29), (2029, 2, 28),
+        (2030, 2, 28), (2031, 2, 28), (2032, 2, 29)]
+
+
+def test_the_window_edges_count_and_an_empty_window_is_empty():
+    a = _abo(takt=1, faellig="2027-03-10")
+    assert _tage(a, date(2027, 3, 10), date(2027, 4, 10)) == [(2027, 3, 10), (2027, 4, 10)]
+    assert _tage(a, date(2027, 3, 11), date(2027, 4, 9)) == []
+    assert _tage(a, date(2027, 5, 1), date(2027, 4, 1)) == []
+
+
+def test_cancellation_and_stock_still_hold_in_a_long_window():
+    a = _abo(takt=1, faellig="2027-03-31", vorrat_bis="2027-05-01",
+             gekuendigt_zum="2027-08-30")
+    assert _tage(a, date(2026, 1, 1), date(2028, 12, 31)) == [
+        (2027, 5, 31), (2027, 6, 30), (2027, 7, 31)]
 
 
 # ------------------------------------------------------ zugeordnete Buchungen
@@ -384,7 +442,7 @@ def test_saving_an_unchanged_entry_leaves_the_file_as_it_is(tmp_path):
     datei.write_text(MICROSOFT, encoding="utf-8")
     [seite] = abos.laden(datei)
     seite["faellig"] = seite["faellig"].isoformat()
-    seite["warum"] = seite["warum"]
+    seite["notiz"] = seite["notiz"]
     abos.speichern(seite, datei)
     assert datei.read_text(encoding="utf-8") == MICROSOFT
 

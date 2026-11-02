@@ -1,0 +1,7 @@
+{# Eine Buchung, die zu einer Planzeile passt, aber noch nicht zugeordnet ist.
+   Die Seite rendert sie beim Laden (_planung_vorschlaege.html), die Suche
+   liefert dieselbe Zeile als Stück der Antwort: kein Skript baut sie nach. #}
+<tr><td class="muted">{{ b.booking_date }}</td><td class="muted">{{ b.account_id }}</td>
+  <td>{{ b.text }}</td><td class="num {{ b.amount_cents|vz }}">{{ b.amount_cents|euro }}</td>
+  <td class="muted">{{ kategorie_namen.get(b.kategorie, b.kategorie or '') }}</td>
+  <td class="aktionen"><button class="ghost" onclick="buchungZu('{{ zid }}', '{{ b.dedup_hash }}')">zuordnen</button></td></tr>

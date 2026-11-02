@@ -13,6 +13,7 @@ from finctl.web.basis import (
     categories,
     conn,
     lies_texte,
+    notiz_felder,
     tax_categories,
 )
 from finctl.web.verkauf import _verkaeufe_aus_plan, _verkauf_kontext
@@ -114,6 +115,7 @@ def immobilie(request: Request, property_id: str):
     return TEMPLATES.TemplateResponse(request, "immobilie.html",
                                       {"p": dict(prop), "k": k, "rows": rows,
                                        "prognose": prognose,
+                                       **notiz_felder(_objekte.vorhandene().get(property_id)),
                                        "verkauf": verkauf, "summe": _summe(rows),
                                        "categories": cats, "tax_categories": taxes,
                                        "cat_label": {x["id"]: x["label"] for x in cats},

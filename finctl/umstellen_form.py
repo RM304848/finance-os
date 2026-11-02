@@ -296,10 +296,10 @@ KOEPFE: dict[str, tuple[str, ...]] = {
     ),
     "prognosebasis_custom.yaml": (
         """\
-# Unter Prognosebasis (/annahmen) abgewaehlte Kategorien.
+# Unter Fortschreibung (/prognosebasis) abgewaehlte Kategorien.
 #
 # Eine Kategorie hier wird in KEINER Prognose fortgeschrieben -- weder auf
-# /konten noch in der Jahresrechnung (/annahmen, /ziele). Gemessen und im
+# /konten noch in der Jahresrechnung (/hochrechnung, /ziele). Gemessen und im
 # Abgleich gezeigt wird sie weiter.
 #
 # Gedacht fuer Unregelmaessiges, das zufaellig im Messfenster lag: eine

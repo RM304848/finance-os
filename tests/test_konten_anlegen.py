@@ -185,3 +185,118 @@ def test_a_windows_device_name_is_no_account_id():
     for kennung in ("con", "nul", "com1", "lpt9"):
         assert any("Windows" in f for f in konten.pruefen({**BEISPIEL, "id": kennung}, set()))
     assert not konten.pruefen({**BEISPIEL, "id": "console"}, set())
+
+
+# ---------------------------------------------------------------- bearbeiten
+
+def _konto(konfig):
+    return yaml.safe_load((konfig / konten.DATEI).read_text(encoding="utf-8"))["accounts"][0]
+
+
+def test_a_change_reaches_the_file_and_the_table_and_keeps_the_rest(db, konfig, tmp_path):
+    konten.anlegen(db, dict(BEISPIEL), konfig, tmp_path / "statements")
+    konten.aendern(db, "beispielbank", {"display_name": "Beispielbank Alltag",
+                                        "dispo_threshold_cents": 20000}, konfig,
+                   tmp_path / "statements")
+    [_, neu] = yaml.safe_load((konfig / konten.DATEI).read_text(encoding="utf-8"))["accounts"]
+    assert (neu["display_name"], neu["dispo_threshold_cents"]) == ("Beispielbank Alltag", 20000)
+    assert neu["institution"] == "Beispielbank" and neu["id"] == "beispielbank"
+    assert db.execute("SELECT display_name, dispo_threshold_cents FROM accounts "
+                      "WHERE id = 'beispielbank'").fetchone() == ("Beispielbank Alltag", 20000)
+    assert _konto(konfig)["notiz"] == "Warum dieses Konto so gefuehrt wird."
+
+
+def test_saving_the_same_thing_again_writes_no_byte(db, konfig, tmp_path):
+    konten.anlegen(db, dict(BEISPIEL), konfig, tmp_path / "statements")
+    vorher = (konfig / konten.DATEI).read_bytes()
+    gleich = {"display_name": "Beispielbank Giro", "institution": "Beispielbank",
+              "account_type": "giro", "ingest_mode": "summary", "parser_profile": "",
+              "statement_folder": "", "dispo_threshold_cents": None, "closed_on": "",
+              "notiz": ""}
+    konten.aendern(db, "beispielbank", gleich, konfig, tmp_path / "statements")
+    konten.aendern(db, "vorhanden", {**gleich, "display_name": "Vorhanden",
+                                     "institution": "X",
+                                     "notiz": "Warum dieses Konto so gefuehrt wird."},
+                   konfig, tmp_path / "statements")
+    assert (konfig / konten.DATEI).read_bytes() == vorher
+
+
+def test_an_untouched_note_keeps_its_date(db, konfig, tmp_path):
+    konten.aendern(db, "vorhanden", {"notiz": "Warum dieses Konto so gefuehrt wird."},
+                   konfig, tmp_path / "statements")
+    assert str(_konto(konfig)["notiz_vom"]) == "2026-02-01"
+    konten.aendern(db, "vorhanden", {"notiz": "Neuer Text."}, konfig, tmp_path / "statements")
+    assert _konto(konfig)["notiz"] == "Neuer Text."
+    assert str(_konto(konfig)["notiz_vom"]) != "2026-02-01"
+    konten.aendern(db, "vorhanden", {"notiz": ""}, konfig, tmp_path / "statements")
+    assert "notiz" not in _konto(konfig) and "notiz_vom" not in _konto(konfig)
+
+
+def test_closing_takes_the_account_out_of_every_choice_and_opening_brings_it_back(
+        db, konfig, tmp_path):
+    konten.anlegen(db, dict(BEISPIEL), konfig, tmp_path / "statements")
+    konten.aendern(db, "beispielbank", {"closed_on": "2026-03-31"}, konfig, tmp_path / "statements")
+    assert db.execute("SELECT active, closed_on FROM accounts WHERE id = 'beispielbank'"
+                      ).fetchone() == (0, "2026-03-31")
+    konten.aendern(db, "beispielbank", {"closed_on": ""}, konfig, tmp_path / "statements")
+    assert db.execute("SELECT active, closed_on FROM accounts WHERE id = 'beispielbank'"
+                      ).fetchone() == (1, None)
+    assert "closed_on" not in yaml.safe_load(
+        (konfig / konten.DATEI).read_text(encoding="utf-8"))["accounts"][1]
+
+
+def test_a_file_that_says_active_false_stays_closed_when_nothing_changes(db, konfig, tmp_path):
+    spec = yaml.safe_load((konfig / konten.DATEI).read_text(encoding="utf-8"))
+    spec["accounts"][0]["active"] = False
+    (konfig / konten.DATEI).write_text(yaml.safe_dump(spec), encoding="utf-8")
+    vorher = (konfig / konten.DATEI).read_bytes()
+    konten.aendern(db, "vorhanden", {"closed_on": "", "display_name": "Vorhanden"}, konfig,
+                   tmp_path / "statements")
+    assert (konfig / konten.DATEI).read_bytes() == vorher
+
+
+@pytest.mark.parametrize("felder, wort", [
+    ({"display_name": ""}, "Anzeigename"),
+    ({"institution": ""}, "Institut"),
+    ({"account_type": "sparbuch"}, "Art"),
+    ({"ingest_mode": "parsed", "parser_profile": ""}, "Parserprofil"),
+    ({"dispo_threshold_cents": -5}, "Schwelle"),
+    ({"closed_on": "bald"}, "Geschlossen"),
+])
+def test_a_wrong_change_is_refused_with_a_reason_and_changes_nothing(
+        db, konfig, tmp_path, felder, wort):
+    vorher = (konfig / konten.DATEI).read_bytes()
+    with pytest.raises(ValueError, match=wort):
+        konten.aendern(db, "vorhanden", felder, konfig, tmp_path / "statements")
+    assert (konfig / konten.DATEI).read_bytes() == vorher
+
+
+def test_an_unknown_account_is_refused(db, konfig, tmp_path):
+    with pytest.raises(ValueError, match="Kein Konto"):
+        konten.aendern(db, "gibtsnicht", {"display_name": "X"}, konfig, tmp_path / "statements")
+
+
+def test_an_old_identifier_that_is_no_longer_allowed_can_still_be_edited(db, konfig, tmp_path):
+    """Die Kennung prueft nur ein neues Konto: Eine fruehere Fassung schrieb auch `Alt_Konto`."""
+    spec = yaml.safe_load((konfig / konten.DATEI).read_text(encoding="utf-8"))
+    spec["accounts"][0]["id"] = "Alt_Konto"
+    (konfig / konten.DATEI).write_text(yaml.safe_dump(spec), encoding="utf-8")
+    db.execute("INSERT INTO accounts (id, display_name, institution, account_type, ingest_mode) "
+               "VALUES ('Alt_Konto', 'V', 'X', 'giro', 'summary')")
+    konten.aendern(db, "Alt_Konto", {"display_name": "Neu benannt"}, konfig,
+                   tmp_path / "statements")
+    assert _konto(konfig)["display_name"] == "Neu benannt"
+
+
+def test_the_page_offers_to_open_a_row_and_the_endpoint_refuses_before_it_writes():
+    from fastapi.testclient import TestClient
+
+    from finctl.web.server import app
+
+    client = TestClient(app)
+    html = client.get("/einrichtung").text
+    assert 'id="ke-panel"' in html and "kontoOeffnen(" in html
+    # Weder IBAN noch Kontonummer stehen in der Maske.
+    assert '"iban"' not in html and "account_no" not in html
+    antwort = client.post("/api/konto-stammdaten/gibtsnicht", json={"display_name": "X"})
+    assert antwort.status_code == 400 and "Kein Konto" in antwort.json()["error"]

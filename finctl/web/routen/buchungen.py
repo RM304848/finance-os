@@ -21,6 +21,7 @@ from finctl.web.basis import (
     categories,
     conn,
     euro,
+    stueck,
     tax_categories,
     umleiten,
     zeitraeume,
@@ -276,15 +277,25 @@ def flagged(request: Request):
 
 
 @router.get("/api/buchungen/suche")
-def api_buchungen_suche(q: str = "", kategorie: str = "", limit: int = 60):
+def api_buchungen_suche(q: str = "", kategorie: str = "", limit: int = 60,
+                        zid: str = "", ausser: list[str] = Query(default=[])):
     """Buchungen zum Zuordnen: Ein- und Ausgaenge, nach Text und/oder Kategorie.
 
     Beides ist optional, aber eines muss da sein -- eine Suche ohne jede
     Einschraenkung waere das ganze Ledger.
+
+    Mit `zid` (eine Planzeile der Seite /planung) kommt dazu, was das Skript
+    der Seite braucht: `html` ist die Liste der Vorschlaege, gerendert aus
+    derselben Vorlage wie auf der Seite, ohne die Buchungen in `ausser` (die
+    stehen dort schon als zugeordnet), und `kopf` der Satz darueber.
     """
     q, kategorie = q.strip(), kategorie.strip()
     if len(q) < 2 and not kategorie:
-        return {"rows": []}
+        if not zid:
+            return {"rows": []}
+        return {"rows": [], "kopf": None, "alle": None, "html": stueck(
+            "_planung_vorschlaege.html", zid=zid, kandidaten=[], kategorie_namen={},
+            meldung="Text oder Kategorie angeben.")}
     from finctl.ingest.base import normalize_counterparty
 
     bedingung, args = [], []
@@ -303,9 +314,23 @@ def api_buchungen_suche(q: str = "", kategorie: str = "", limit: int = 60):
                 WHERE  {' AND '.join(bedingung)}
                 ORDER  BY t.booking_date DESC LIMIT ?""",
             [*args, max(1, min(int(limit), 200))]).fetchall()
+        namen = {k["id"]: k["label"] for k in categories(c)} if zid else {}
     finally:
         c.close()
-    return {"rows": [dict(r) for r in rows]}
+    rows = [dict(r) for r in rows]
+    if not zid:
+        return {"rows": rows}
+    treffer = [b for b in rows if b["dedup_hash"] not in set(ausser)]
+    # Bereits Zugeordnetes steht auf der Seite oben und fehlt hier -- das muss
+    # die Meldung sagen, sonst liest sich "nichts gefunden" wie ein Fehler.
+    bereits = len(rows) - len(treffer)
+    zusatz = f" ({bereits} bereits zugeordnet, siehe oben)" if bereits else ""
+    kopf = (f"{len(treffer)} Buchungen{'' if kategorie else ' aus allen Kategorien'}"
+            f" — zählen erst nach dem Zuordnen{zusatz}" if treffer
+            else f"Keine weitere Buchung gefunden{zusatz}")
+    return {"rows": treffer, "kopf": kopf, "alle": bool(treffer), "html": stueck(
+        "_planung_vorschlaege.html", zid=zid, kandidaten=treffer, kategorie_namen=namen,
+        meldung=None)}
 
 
 def _baumfilter(werte: list[str], spalte: str) -> tuple[str, list[str]]:

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from finctl.web.server import app
@@ -219,19 +221,53 @@ def test_the_hochrechnung_page_offers_the_tempo_as_links_and_keeps_it_in_the_flo
     assert client.get("/hochrechnung?tempo=x").text == schnitt
 
 
+def _ziel_im_monatsabschluss() -> dict:
+    from finctl.forecast import ziele as zm
+
+    spec = (yaml.safe_load(PFAD.read_text(encoding="utf-8")) or {}) if PFAD.exists() else {}
+    ziel = zm.monatsabschluss_ziel(spec)
+    if ziel is None:
+        pytest.skip("kein Ziel mit im_monatsabschluss in dieser Konfiguration")
+    return ziel
+
+
 def test_the_progress_line_shows_the_same_projection_as_the_goal_on_ziele():
-    """Eine Rechnung, zwei Stellen: die Zeile "Barista FIRE ... hochgerechnet" auf dem
+    """Eine Rechnung, zwei Stellen: die Zeile "<Ziel> ... hochgerechnet" auf dem
     Monatsabschluss und das Ziel auf /ziele messen zum selben Stichtag gegen dieselbe Basis.
     Fruehr nahm die Zeile das ganze Endkapital am Jahresende, samt Policen."""
     import re
 
+    ziel = _ziel_im_monatsabschluss()
     html = client.get("/ziele").text
-    karte = html.split('data-ziel="barista-fire"', 1)
-    assert len(karte) == 2, "kein Barista-FIRE-Ziel in dieser Konfiguration"
+    karte = html.split(f'data-ziel="{ziel["id"]}"', 1)
+    assert len(karte) == 2, "das gewaehlte Ziel steht nicht auf /ziele"
     stichtag = re.search(r"extrapoliert zum\s*<a[^>]*>(\d{4})-\d\d-\d\d</a>.*?— (\d+) %",
                          karte[1].split('data-ziel="', 1)[0], re.S)
     assert stichtag, "keine Hochrechnung am Ziel"
-    zeile = re.search(r"Barista FIRE heute [\d,]+ %, hochgerechnet (\d{4}) (\d+) %",
+    zeile = re.search(re.escape(ziel.get("name") or ziel["id"])
+                      + r" heute [\d,]+ %, hochgerechnet (\d{4}) (\d+) %",
                       client.get("/monatsabschluss").text)
     assert zeile, "keine Fortschrittszeile im Monatsabschluss"
     assert zeile.groups() == stichtag.groups()
+
+
+def test_the_progress_line_needs_the_merkmal(monkeypatch):
+    """Ohne `im_monatsabschluss` am Ziel zeigt der Monatsabschluss keine Fortschrittszeile --
+    kein Ziel wird stillschweigend gewaehlt."""
+    from finctl.forecast import ziele as zm
+
+    ziel = _ziel_im_monatsabschluss()
+    html = client.get("/monatsabschluss").text
+    assert (ziel.get("name") or ziel["id"]) + " heute" in html
+    monkeypatch.setattr(zm, "monatsabschluss_ziel", lambda goals: None)
+    assert (ziel.get("name") or ziel["id"]) + " heute" not in client.get("/monatsabschluss").text
+
+
+def test_monatsabschluss_ziel_takes_the_first_marked_goal():
+    from finctl.forecast import ziele as zm
+
+    ziele = {"ziele": [{"id": "a"}, {"id": "b", "im_monatsabschluss": True},
+                       {"id": "c", "im_monatsabschluss": True}]}
+    assert zm.monatsabschluss_ziel(ziele)["id"] == "b"
+    assert zm.monatsabschluss_ziel({"ziele": [{"id": "a"}]}) is None
+    assert zm.monatsabschluss_ziel({}) is None

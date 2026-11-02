@@ -555,6 +555,7 @@ def monatsabschluss(request: Request):
     c = conn()
     try:
         balances = _best.zusammenfuehren(c, bal)["balances"]
+        freie_konten = _best.freie_konten(c, bal)
         geparst = {r[0] for r in c.execute(
             "SELECT id FROM accounts WHERE ingest_mode = 'parsed'")}
         posten = (_ma.konten(c, heute, periode, balances)
@@ -566,6 +567,7 @@ def monatsabschluss(request: Request):
             posten += _ma.renten(heute, jahr)
         auszug = _best.auszugsstaende(c, sorted(geparst))
         posten += _ma.planung_offen(c, heute, periode)
+        posten += _ma.planung_doppelt(c, periode)
         # Eine kaputte abos.yaml soll den Monatsabschluss nicht mitreissen;
         # /abos zeigt den Fehler an der Stelle, wo er zu beheben ist.
         with contextlib.suppress(ValueError):
@@ -600,12 +602,13 @@ def monatsabschluss(request: Request):
     from finctl import fristen as _fr
 
     fristen = _fr.alle(heute)
-    gruppen = [("abos", "Geteilte Abos"), ("planung", "Planung")]
+    gruppen = [("abos", "Verträge mit Mitzahlern"), ("planung", "Planung")]
     return TEMPLATES.TemplateResponse(request, "monatsabschluss.html", {
         "posten": posten, "schritte": schritte, "gruppen": gruppen,
         "staende": _staende(posten, bestand, auszug, jahr, _MONATE[heute.month],
                             _MONATE[12 if heute.month == 1 else heute.month - 1]),
         "kacheln": kacheln, "ohne_objekt": ohne_objekt, "bestand": bestand,
+        "freie_konten": freie_konten, "positionsarten": _best.POSITIONSARTEN,
         "wirkung": wirkung, "quellen": _QUELLEN,
         "fristen_bald": [f for f in fristen if f.bald(heute)],
         "naechste_frist": next((f for f in fristen if f.ab > heute), None),
@@ -641,7 +644,7 @@ _STAENDE_TEXT = {
     "konten": "Aktuell, wenn der Auszug den {vormonat} abdeckt.",
     "vermoegen": "Aktuell, wenn der Stand aus dem {monat} ist.",
     "jaehrlich": "Aktuell, wenn die Standmitteilung aus {jahr} ist.",
-    "renten": "Aktuell, wenn die Renteninformation aus {jahr} ist. Gepflegt unter Renten.",
+    "renten": "Aktuell, wenn die Renteninformation aus {jahr} ist. Gepflegt unter Rentenquellen.",
 }
 
 
@@ -683,6 +686,7 @@ def _staende(posten: list, bestand: dict | None, auszug: dict, jahr: str,
                 # Nur was in balances.yaml steht, hat eine Notiz: nur das
                 # zaehlt zum Vermoegen.
                 "notiz": key in zu, "note": b.get("note", ""),
+                "notiz_vom": b.get("notiz_vom", ""),
                 # Nur ein Depot hat einen Gewinn, der beim Verkauf Steuer kostet.
                 "depot": _TOPF.get(str(p.art or "").lower()) == "depot",
                 "gewinn": b.get("gewinn_cents"),
@@ -719,7 +723,7 @@ def _rentenzeilen(posten: list) -> list[dict]:
         q = je[p.schluessel]
         zeilen.append({"p": p, "key": q.id, "kind": q.art, "cents": q.cents,
                        "as_of": q.stand.isoformat() if q.stand else "",
-                       "auszug": False, "notiz": True, "note": q.notiz,
+                       "auszug": False, "notiz": True, "note": q.notiz, "notiz_vom": q.notiz_vom,
                        "api": "/api/rente",
                        "ab": q.ab.strftime("%Y-%m") if q.ab else "",
                        "ab_vorgabe": rentenbeginn.strftime("%Y-%m") if rentenbeginn else "",
@@ -732,7 +736,7 @@ def _staende_titel(gid: str, zeilen: list[dict], jahr: str) -> str:
     if gid == "konten":
         return "Konten"
     if gid == "renten":
-        return f"Renten laut Mitteilung · {jahr}"
+        return f"Rentenquellen · {jahr}"
     if gid == "jaehrlich":
         return f"Rentenversicherungen · {jahr}"
     # Ein Konto ohne Parser wird getippt wie ein Depot und steht deshalb hier.
@@ -745,10 +749,10 @@ _MONATE = ("", "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
 
 
 def _fortschritt_zeile(c: sqlite3.Connection) -> dict | None:
-    """Barista FIRE heute und hochgerechnet, als eine Zeile.
+    """Das Ziel mit dem Merkmal `im_monatsabschluss` heute und hochgerechnet, als eine Zeile.
 
-    Keine Zeile, wo es das Ziel nicht gibt: Wer Ziele nicht eingeschaltet hat oder keines mit
-    dieser Kennung fuehrt, soll nicht lesen, was ihm fehlt.
+    Keine Zeile, wo es das Ziel nicht gibt: Wer Ziele nicht eingeschaltet hat oder keines
+    gewaehlt hat, soll nicht lesen, was ihm fehlt.
 
     Beide Zahlen, weil eine allein nichts sagt: der Bestand beantwortet nicht,
     ob man ankommt, und die Hochrechnung allein laesst ein kaum begonnenes
@@ -772,8 +776,9 @@ def _fortschritt_zeile(c: sqlite3.Connection) -> dict | None:
 
     merged = _best.zusammenfuehren(c, read("balances.yaml"))
 
+    gewaehlt = _ziele.monatsabschluss_ziel(goals)
     ziel = next((p for p in _ziele.progress(goals, merged, today=_d.today())
-                 if p.goal_id == "barista-fire"), None)
+                 if gewaehlt and p.goal_id == gewaehlt["id"]), None)
     if ziel is None:
         return None
     jahr = int(ziel.due.year) if ziel.due else 2045
@@ -787,7 +792,7 @@ def _fortschritt_zeile(c: sqlite3.Connection) -> dict | None:
     from finctl.forecast import ziel_monat as _zm
 
     h, modell = _zm.messen(ziel, lauf, merged, _ziele.puffer_cents(goals), _zm.Lauf(c))
-    text = f"Barista FIRE heute {ziel.pct:.1f} %"
+    text = f"{ziel.name} heute {ziel.pct:.1f} %"
     if h is not None:
         text += f", hochgerechnet {ziel.due.year} {h.pct:.0f} %"
         if modell == _zm.MONATSMODELL:

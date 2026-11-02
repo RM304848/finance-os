@@ -41,4 +41,7 @@ enden: {}
 cashflow_ohne_objekt:
   klammer: ferienhaus
   ziel_cents: 0
-  gemeinschaftskonto_soll_cents: 30000
+  daneben:
+    kategorie: familie/gemeinschaftskonto
+    label: Gemeinschaftskonto
+    soll_cents: 30000

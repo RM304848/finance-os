@@ -43,6 +43,8 @@ jobs:
         run: echo "nummer=$(python -c 'import finctl; print(finctl.__version__)')" >> "$GITHUB_OUTPUT"
       - name: Lizenzen der Bibliotheken
         run: python werkzeuge/paket/drittlizenzen.py DRITTLIZENZEN.txt
+      - name: Anleitung
+        run: python werkzeuge/paket/anleitung.py Anleitung.html
       - name: Bauen
         run: pyinstaller --noconfirm werkzeuge/paket/finance_os.spec
 
@@ -55,9 +57,18 @@ jobs:
           mkdir dmg
           cp -R "dist/Finance OS.app" dmg/
           ln -s /Applications dmg/Programme
-          cp LICENSE.md DRITTLIZENZEN.txt dmg/
+          cp LICENSE.md DRITTLIZENZEN.txt Anleitung.html dmg/
           hdiutil create -volname "Finance OS" -srcfolder dmg -ov -format UDZO \
             "FinanceOS-${{ steps.version.outputs.nummer }}-mac.dmg"
+
+      # Dieselbe Anleitung zum Ausdrucken; Chrome liegt auf dem Mac-Runner bereit.
+      - name: Anleitung als PDF (Mac)
+        if: matrix.system == 'mac'
+        run: |
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+            --disable-gpu --no-pdf-header-footer --print-to-pdf="$PWD/Anleitung.pdf" \
+            "file://$PWD/Anleitung.html"
+          test -s Anleitung.pdf
 
       - name: Rauchtest (Windows)
         if: matrix.system == 'windows'
@@ -73,6 +84,7 @@ jobs:
           path: |
             FinanceOS-*
             DRITTLIZENZEN.txt
+            Anleitung.*
           if-no-files-found: error
 
   entwurf:

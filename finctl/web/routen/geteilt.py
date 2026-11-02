@@ -211,7 +211,7 @@ async def api_projekt_entfernen(request: Request):
     def entfernen(d, b):
         pid = str(b.get("id") or "")
         if pid not in d.projekte:
-            raise ValueError("Unbekannter Budgettopf.")
+            raise ValueError("Unbekannte Themenkasse.")
         del d.projekte[pid]
         for k in [k for k, z in d.buchungen.items() if z.projekt == pid]:
             del d.buchungen[k]

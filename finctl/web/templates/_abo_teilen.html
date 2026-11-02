@@ -1,0 +1,72 @@
+{# Geteilt: Besetzung, laufende Zahler und Zeiträume eines Vertrags. Gehört zu
+   _abo_editor.html und nimmt dessen Namen (`st`, `info`, `ab`) mit. #}
+{% import "_abo_bausteine.html" as bs %}
+{% set g = st.geteilt %}
+{% set lauf = info.laufend or [] %}
+<div class="abo-teil"><strong>Mitzahler</strong>
+  <table class="besetzung"><tr><th>Mitzahler</th><th class="num" style="width:120px">Anteil</th><th>Heißt auch</th><th style="width:110px">zahlt laufend seit</th><th style="width:40px"></th></tr>
+    {% for p in g.besetzung %}
+    {% set j = loop.index0 %}
+    <tr><td><input data-b="{{ j }}" data-k="name" value="{{ p.name }}"></td>
+      <td class="num"><input data-b="{{ j }}" data-k="anteil" value="{{ p.anteil_text if p.anteil_text is defined and p.anteil_text is not none else (p.anteil_cents or 0)|betrag }}" class="betrag"></td>
+      <td><input data-b="{{ j }}" data-k="aliase" value="{{ (p.aliase or [])|join(', ') }}" placeholder="Name auf der Rückzahlung"></td>
+      <td><input data-b="{{ j }}" data-k="seit" value="{{ p.seit or '' }}" placeholder="2026-08"></td>
+      <td><button class="ghost" data-a="b-weg" data-i="{{ j }}" aria-label="Entfernen">×</button></td></tr>
+    {% endfor %}
+  </table><button class="ghost" data-a="b-neu">Mitzahler hinzufügen</button>
+  <button class="ghost" data-a="zr-neu">Zeitraum anlegen</button>
+
+  {# Laufend: wer jeden Takt selbst überweist, braucht keinen Zeitraum. #}
+  {% for p in g.besetzung %}
+  {% set j = loop.index0 %}
+  {% set rp = lauf|selectattr('name', 'equalto', p.name)|first %}
+  {% if p.seit and rp %}
+  {% set ziel = 'L:' ~ j %}
+  <div class="zr"><div class="zr-kopf"><span>{{ p.name }} zahlt laufend seit {{ p.seit }}</span>
+    <span style="flex:1"></span>{% if rp.offen %}<span class="neg">{{ bs.eur(rp.offen) }} offen</span>{% else %}<span class="pos">ausgeglichen</span>{% endif %}</div>
+    <table class="personen"><tr><th>Mitzahler</th><th class="num" style="width:120px">Soll</th>
+      <th class="num" style="width:100px">zurück</th><th class="num" style="width:100px">offen</th><th></th></tr>
+    <tr><td>{{ p.name }}</td><td class="num">{{ bs.eur(rp.soll) }}</td><td class="num">{{ bs.eur(rp.zurueck) }}</td>
+      <td class="num {{ 'neg' if rp.offen else 'pos' }}">{{ bs.eur(rp.offen) if rp.offen else '✓' }}</td>
+      <td class="aktionen"><button class="ghost" data-a="zahlung-suche" data-i="{{ ziel }}">Zahlung zuordnen</button></td></tr>
+    {% for tr in rp.treffer %}{{ bs.trefferzeile(tr, ziel) }}{% endfor %}
+    {% if info.suche == ziel %}{{ bs.zahlungspanel(rp, ziel, info) }}{% endif %}
+    </table></div>
+  {% endif %}
+  {% endfor %}
+
+  {% for i, z in ab.zeitraeume %}
+  {% set r = (info.abrechnung or [])|selectattr('von', 'equalto', z.von)|first %}
+  <div class="zr"><div class="zr-kopf">
+    <input data-z="{{ i }}" data-k="von" value="{{ z.von }}" placeholder="2027-04"> bis
+    <input data-z="{{ i }}" data-k="bis" value="{{ z.bis }}" placeholder="2028-04">
+    <span class="muted">einsammeln</span>
+    <input data-z="{{ i }}" data-k="einsammeln" value="{{ z.einsammeln }}" placeholder="2028-04">
+    <span style="flex:1"></span>
+    {%- if r %}{% if r.status == 'abgerechnet' %}<span class="pos">abgerechnet</span>
+      {%- elif r.status == 'faellig' %}<span class="neg">{{ bs.eur(r.offen) }} offen, fällig</span>
+      {%- else %}<span class="muted">{{ bs.eur(r.offen) }} offen</span>{% endif %}{% endif %}
+    <button class="ghost" data-a="zr-weg" data-i="{{ i }}" aria-label="Zeitraum entfernen">×</button></div>
+    <table class="personen"><tr><th>Mitzahler</th><th class="num" style="width:120px">Anteil</th>
+      <th class="num" style="width:100px">zurück</th><th class="num" style="width:100px">offen</th><th></th></tr>
+    {% for p in z.personen %}
+    {% set j = loop.index0 %}
+    {% set ziel = i ~ ':' ~ j %}
+    {% set rp = r.personen|selectattr('name', 'equalto', p.name)|first if r else none %}
+    {% set offen = rp.offen if rp else none %}
+    <tr><td>{{ p.name }}</td>
+      <td class="num"><input data-zp="{{ ziel }}" data-k="anteil" value="{{ p.anteil_text if p.anteil_text is defined and p.anteil_text is not none else (p.anteil_cents or 0)|betrag }}" class="betrag"></td>
+      <td class="num">{{ bs.eur(rp.zurueck) if rp else '—' }}</td>
+      <td class="num {{ 'muted' if offen is none else ('pos' if not offen else ('neg' if r.status == 'faellig' else 'muted')) }}">{{ '—' if offen is none else (bs.eur(offen) if offen else '✓') }}</td>
+      <td class="aktionen"><button class="ghost" data-a="zahlung-suche" data-i="{{ ziel }}">Zahlung zuordnen</button>
+        <button class="ghost" data-a="zp-weg" data-i="{{ ziel }}" aria-label="Mitzahler entfernen">×</button></td></tr>
+    {% for tr in (rp.treffer if rp else []) %}{{ bs.trefferzeile(tr, ziel) }}{% endfor %}
+    {% if info.suche == ziel %}{{ bs.zahlungspanel(rp, ziel, info) }}{% endif %}
+    {% endfor %}
+    <tr class="neu"><td><input data-zp-neu-name="{{ i }}" placeholder="Mitzahler" style="width:100%"></td>
+      <td class="num"><input data-zp-neu-anteil="{{ i }}" placeholder="0,00" class="betrag"></td>
+      <td colspan="2"></td>
+      <td class="aktionen"><button class="ghost" data-a="zp-neu" data-i="{{ i }}">hinzufügen</button></td></tr>
+    </table></div>
+  {% endfor %}
+</div>

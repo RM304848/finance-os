@@ -31,12 +31,12 @@ def test_numbers_never_leave_the_machine():
     assert len(vs.bereinigt("x" * 200)) == 60
 
 
-def test_the_prompt_carries_categories_and_the_chosen_texts_only():
+def test_the_situation_carries_categories_and_the_chosen_texts_only():
     kats = [{"id": "lebensmittel/supermarkt", "label": "Supermarkt"}]
-    auftrag = vs.prompt(kats, ["Erfundener Laden"], {"lebensmittel/supermarkt": 3})
-    assert "lebensmittel/supermarkt – Supermarkt – 3" in auftrag
-    assert "- Erfundener Laden" in auftrag
-    assert "Suchtext ; Kategorie" in auftrag
+    lage = vs.lage(kats, ["Erfundener Laden"], {"lebensmittel/supermarkt": 3})
+    assert "lebensmittel/supermarkt – Supermarkt – 3" in lage
+    assert "- Erfundener Laden" in lage
+    assert "Suchtext ; Kategorie" in vs.FRAGE
 
 
 @pytest.mark.parametrize("antwort", [
@@ -85,17 +85,6 @@ def test_taking_over_writes_ordinary_text_rules(monkeypatch):
     assert gespeichert == [{"id": "laden-a-2", "name": "Laden A", "priority": vs.PRIORITAET,
                             "match": {"text": ["Laden A"]},
                             "set": {"mgmt": "konsum/sonstiges"}}]
-
-
-def test_the_api_refuses_texts_the_page_did_not_offer():
-    """Nur, was die Seite bereinigt angeboten hat, kommt in den Auftrag."""
-    from fastapi.testclient import TestClient
-
-    from finctl.web.server import app
-
-    antwort = TestClient(app).post("/api/regeln/vorschlaege/prompt",
-                                   json={"texte": ["DE12500105170648489890"]})
-    assert antwort.status_code == 400
 
 
 def test_the_api_refuses_to_take_over_an_unknown_category():

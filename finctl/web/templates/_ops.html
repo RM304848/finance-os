@@ -51,13 +51,13 @@ async function runUpdate(){
     // invalidates numbers that otherwise look perfectly reasonable.
     const trouble = [];
     if(p.rejected_statements.length) trouble.push(
-      p.rejected_statements.length + ' Auszug/Auszüge abgelehnt (Saldo geht nicht auf)');
+      p.rejected_statements.length + ' Auszug/Auszüge abgelehnt (Stand geht nicht auf)');
     if(p.statement_gaps.length) trouble.push(
       p.statement_gaps.map(g => `Lücke bei ${g.account_id}: ${g.after} → ${g.before}`).join('; '));
-    if(p.split_imbalances.length) trouble.push(p.split_imbalances.length + ' Split-Differenzen');
-    if(p.orphaned_splits.length)  trouble.push(p.orphaned_splits.length + ' verwaiste Splits');
+    if(p.split_imbalances.length) trouble.push(p.split_imbalances.length + ' Buchungen, deren Teile nicht aufgehen');
+    if(p.orphaned_splits.length)  trouble.push(p.orphaned_splits.length + ' verwaiste Teile');
     if(p.unrecorded_manual.length) trouble.push(
-      p.unrecorded_manual.length + ' manuelle Entscheidungen nicht gesichert');
+      p.unrecorded_manual.length + ' Handentscheidungen nicht gesichert');
     if(trouble.length) msg += '<br><strong>Prüfen:</strong> ' + trouble.join(' · ');
     opsSay(msg, out.ok ? 'ok' : 'bad');
     if(i.imported) setTimeout(() => location.reload(), 2500);
@@ -67,19 +67,19 @@ async function runUpdate(){
 
 async function runBackup(){
   opsBusy('btn-backup', true, 'Sichern');
-  opsSay('Snapshot wird geschrieben.');
+  opsSay('Sicherung wird geschrieben.');
   try {
     const res = await fetch('/api/backup', {method:'POST',
       headers:{'Content-Type':'application/json'}, body:'{}'});
     const out = await res.json();
-    if(!res.ok){ opsSay('Backup fehlgeschlagen: ' + (out.error || res.status), 'bad'); }
+    if(!res.ok){ opsSay('Sicherung fehlgeschlagen: ' + (out.error || res.status), 'bad'); }
     else {
-      let m = `Backup geschrieben — <code>${out.archive}</code>, `
+      let m = `Sicherung geschrieben — <code>${out.archive}</code>, `
             + `${out.groesse}, ${out.kept} Stände aufbewahrt`;
       if(out.pruned.length) m += `, ${out.pruned.length} ältere entfernt`;
       opsSay(m + '.', 'ok');
     }
-  } catch(e){ opsSay('Backup fehlgeschlagen: ' + e, 'bad'); }
+  } catch(e){ opsSay('Sicherung fehlgeschlagen: ' + e, 'bad'); }
   opsBusy('btn-backup', false, 'Sichern');
   zielLaden();
 }

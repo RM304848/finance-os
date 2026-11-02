@@ -1,0 +1,72 @@
+{% extends "base.html" %}{% block n_vorschlaege %}on{% endblock %}
+{% block title %}Vorschläge{% endblock %}
+{% block body %}
+{% import "_konfig.html" as kf %}
+<h1>Vorschläge</h1>
+<p class="zweck">Was hat ein Modell dir vorgeschlagen, und was würde sich ändern, wenn du zusagst?</p>
+
+{% if not liste %}
+<div class="note">Kein offener Vorschlag.</div>
+{% endif %}
+{% for v in liste %}
+<h2>{{ v.art }}{% if v.pruefung %} — {{ v.pruefung.titel }}{% endif %}</h2>
+<div id="vs-{{ v.id }}">
+  {% if v.warum %}<p>{{ v.warum }}</p>{% endif %}
+  {% if v.fehler %}
+  <div class="note neg">Geht nicht mehr: {{ v.fehler }}</div>
+  {% else %}
+  <div class="wrap"><table class="detail">
+    <tr><th style="width:200px">Feld</th><th>Wert</th></tr>
+    {% for feld, wert in v.pruefung.zeilen %}
+    <tr><td>{{ feld }}</td><td style="white-space:pre-wrap">{{ wert }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% for h in v.pruefung.hinweise %}<div class="note">{{ h }}</div>{% endfor %}
+  {% endif %}
+  <p class="zeilen-knoepfe">
+    {% if not v.fehler %}<button type="button" onclick="vsUebernehmen(this, '{{ v.id }}')">Übernehmen</button>{% endif %}
+    <button type="button" class="ghost" onclick="vsVerwerfen(this, '{{ v.id }}')">Verwerfen</button>
+    <span class="klein muted">abgelegt {{ v.angelegt }}</span></p>
+</div>
+{% endfor %}
+
+<details class="hilfe">
+  <summary>Wie Vorschläge entstehen</summary>
+  <p>Ein Modell legt sie über den MCP-Zugang ab.</p>
+  <p>Es schreibt nie selbst in deine Dateien.</p>
+</details>
+
+<script type="application/json" id="vs-senden">{{ senden|tojson }}</script>
+<script>
+const VS_SENDEN = JSON.parse(document.getElementById('vs-senden').textContent);
+async function vsPost(url, body){
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                              body: JSON.stringify(body)});
+  let j = {};
+  try { j = await r.json(); } catch (e) {}
+  return [r.ok, j];
+}
+async function vsUebernehmen(knopf, id){
+  const s = VS_SENDEN[id];
+  const [ok, j] = await vsPost(s.route, s.body);
+  if (!ok){ meldenNeben(knopf, j.error || 'nicht übernommen', true); return; }
+  await vsPost('/api/vorschlaege/' + id + '/verwerfen', {});
+  location.reload();
+}
+async function vsVerwerfen(knopf, id){
+  const [ok, j] = await vsPost('/api/vorschlaege/' + id + '/verwerfen', {});
+  if (!ok){ meldenNeben(knopf, j.error || 'nicht verworfen', true); return; }
+  location.reload();
+}
+</script>
+
+{{ kf.fuss([
+  ('data/vorschlaege/', 'Die offenen Vorschläge, eine Datei je Vorschlag.'),
+  ('config/rules.yaml', 'Dahin geht eine übernommene Regel.'),
+  ('config/szenarien.yaml', 'Dahin geht eine übernommene Planzeile.'),
+  ('config/loans.yaml', 'Dahin geht ein übernommener Kredit.'),
+  ('config/goals.yaml', 'Dahin geht eine übernommene Notiz an einem Ziel.'),
+  ('config/forecast.yaml', 'Dahin geht eine übernommene Notiz an einem Konto.'),
+  ('finctl/web/templates/vorschlaege.html', 'Die Texte dieser Seite.'),
+], handbuch='vorschlaege') }}
+{% endblock %}

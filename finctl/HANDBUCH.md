@@ -3,13 +3,13 @@
 Finance OS liest deine Kontoauszüge ein und ordnet jede Buchung zu – lokal
 auf deinem Rechner, ohne Cloud und ohne Bankzugang. Daraus entsteht jeden
 Monat ein Abschluss: wohin das Geld geht, was Fixkosten sind und was übrig
-bleibt. Und der Blick nach vorn: Kredite, Immobilien, Anschlussfinanzierungen,
+bleibt. Und der Blick nach vorn: Kredite, Objekte, Anschlussfinanzierungen,
 Lebensziele, große Anschaffungen und Urlaube, Rentenlücke – durchgerechnet bis
 zum Lebensende, sodass Entscheidungen auf Zahlen beruhen statt auf Gefühl.
 
 Das Werkzeug läuft vollständig ohne Sprachmodell. KI hat die Regeln *geschrieben*;
 ausgeführt werden sie von gewöhnlichem Python, deterministisch und offline. Zweimal
-laufen lassen ergibt byte-identische Splits — dafür gibt es einen Test.
+laufen lassen ergibt byte-identische Teile — dafür gibt es einen Test.
 
 Dieses Dokument ist die Bedienungsanleitung für den Fall, dass nie wieder ein Modell
 beteiligt ist.
@@ -26,7 +26,7 @@ deinem Rechner; die App braucht kein Konto und keine Verbindung zur Bank. Der We
 Auswertung:
 
 1. **Konto anlegen.** Unter „3 — Welche Konten es gibt“ eine Datei aus dem Online-Banking
-   wählen und **Erkennen** drücken. Bei der Sparkasse ist es der CSV-Export der Umsätze
+   wählen und **Erkennen** drücken. Bei der Sparkasse ist es der Auszug als CSV
    („CSV-CAMT V2“). Die App nennt Bank, Konto und Zeitraum; **Neues Konto damit** füllt das
    Formular, **Anlegen** speichert es und legt die Datei im Auszugsordner des Kontos ab.
 2. **Sicherung eintragen.** Unter „2 — Wohin gesichert wird“ einen Ordner wählen, am besten
@@ -34,13 +34,13 @@ Auswertung:
    Sicherung deinen Rechner: sie enthält deine Konfiguration und die Datenbank mit allen
    Buchungen, unverschlüsselt.
 3. **Update.** Auf dem **Monatsabschluss** liest **Update** die abgelegten Auszüge ein und
-   wendet die Regeln an. Danach steht unter **Transaktionen → Offen**, was keine Regel erkannt
+   wendet die Regeln an. Danach steht unter **Buchungen → Offen**, was keine Regel erkannt
    hat; dort die Kategorie wählen. Gemerkt wird jede Entscheidung, auch beim nächsten Update.
 4. **Jeden Monat wieder:** den neuen Export im Online-Banking holen, in der Einrichtung bei
    **Erkennen** wählen und im Konto ablegen, **Update** drücken, Offenes zuordnen, **Sichern**.
 
 Angezeigt ist zunächst nur die Basis: Konten, Auszüge, Kategorien und Regeln, Rückblick.
-Verträge, Kredite, Immobilien, Prognose und Ziele schaltest du unter „5 — Was die App zeigen
+Verträge, Kredite, Objekte, Prognose und Ziele schaltest du unter „5 — Was die App zeigen
 soll“ dazu, wenn du sie brauchst; Ausschalten blendet nur aus und löscht nichts. Die Befehle
 in den folgenden Abschnitten sind für alle, die lieber im Terminal arbeiten.
 
@@ -102,7 +102,7 @@ finctl ort        # der Datenordner; die Auszuege liegen darin unter data/statem
 finctl ingest run
 ```
 
-Ein Auszug wird nur übernommen, wenn `Anfangssaldo + Σ Buchungen = Endsaldo`.
+Ein Auszug wird nur übernommen, wenn `Anfangsstand + Σ Buchungen = Endstand`.
 Stimmt das nicht, wird er **abgelehnt**, nicht halb importiert. `rejected 0` ist das
 Ziel.
 
@@ -112,7 +112,7 @@ Ziel.
 finctl categorize
 ```
 
-Wendet den Regelsatz an. Manuelle Entscheidungen werden nie überschrieben.
+Wendet den Regelsatz an. Handentscheidungen werden nie überschrieben.
 
 **4. Prüfen.**
 
@@ -121,7 +121,7 @@ finctl validate
 ```
 
 Muss `All invariants hold.` sagen. Meldet es eine Lücke in der Auszugskette, fehlt
-ein Auszug — die Kette verlangt, dass der Endsaldo eines Auszugs der Anfangssaldo des
+ein Auszug — die Kette verlangt, dass der Endstand eines Auszugs der Anfangsstand des
 nächsten ist.
 
 **5. Nacharbeiten im Dashboard.**
@@ -130,7 +130,7 @@ nächsten ist.
 finctl serve
 ```
 
-→ <http://127.0.0.1:8765>, Seite **Transaktionen**, Reiter **Offen**. Dort steht, was keine Regel erkannt hat.
+→ <http://127.0.0.1:8765>, Seite **Buchungen**, Reiter **Offen**. Dort steht, was keine Regel erkannt hat.
 
 Aus dem Paket (`.dmg`, `.exe`) oder mit `finctl app` startet dasselbe Dashboard
 auf <http://127.0.0.1:8777>, richtet beim ersten Mal ein und öffnet den Browser.
@@ -150,6 +150,8 @@ Das **Warum** steht als **Notiz** am Eintrag (`notiz`, dazu `notiz_vom` mit dem 
 letzten Änderung), nicht als Kommentar. Eine Einstellung ohne Kennung und eine ganze Datei
 tragen ihre Notiz unter `notizen:` ganz unten, mit dem Schlüsselpfad (`kapital.rendite_depot_pa`)
 oder `bereich` als Ort. Eine Notiz ohne Datum stammt aus der Zeit vor den Notizen.
+Jede Seite, die einen Eintrag zeigt, zeigt auch seine Notiz, aufklappbar und mit dem Datum ihrer
+letzten Änderung; fehlt es, steht dort „ohne Datum“. Ein Speichern ohne Änderung macht sie nicht jünger.
 
 **Wer eine Datei von Hand ändert, schreibt das Warum in `notiz` und nicht als `#`-Kommentar.**
 Ein neuer Kommentar in einer Datei, die eine Seite hat, gilt als alte Form: Die App hält
@@ -171,23 +173,23 @@ und deren Kommentare die Form der Datei beschreiben: `server.yaml`, `taxonomy_mi
 | `renten.yaml` | Rentenquellen mit Betrag, Beginn, Stand und Notiz | ja (/renten) |
 | `goals.yaml` | Ziele; auch was auf /ziele angelegt oder geändert wurde | ja (/ziele) |
 | `properties.yaml` | Objekte, AfA, Kaufdaten, Prognose; auch was im Dashboard angelegt oder eingetragen wurde | teilweise |
-| `loans.yaml` | Darlehen und Zinsbindungssegmente; auch was auf /kredite angelegt oder eingetragen wurde | teilweise |
+| `loans.yaml` | Kredite und Zinsbindungssegmente; auch was auf /kredite angelegt oder eingetragen wurde | teilweise |
 | `szenarien.yaml` | Klammern: Verpflichtungen und Pläne | ja (Reiter Planung) |
 | **`assumptions.yaml`** | **Alle Annahmen: Inflation, Rendite, Gehaltsfloor** | teilweise |
 | `assumptions.optimistisch.yaml`, `assumptions.pessimistisch.yaml` | Alternative Annahmen für `finctl jahre --szenario` | nein |
 | `forecast.yaml` | Was fortgeschrieben werden darf; Rolle, Budget und Untergrenze je Konto | Konten: ja (/konten) |
 | `lebensplan.yaml` | Geburtsdatum, Krankenversicherung, Rentenalter | ja (/einrichtung) |
-| `backup.yaml` | Sicherungsziel und Zahl der Stände | ja (/einrichtung) |
+| `backup.yaml` | Sicherungsziel und Zahl der Sicherungen | ja (/einrichtung) |
 | `strom.yaml`, `energie.yaml` | Zähler, Ablesungen und Vorräte | ja (/energie) |
 | `groups.yaml` | Vorgänge | nein |
-| `adjustments.yaml` | Korrektur eines falsch gedruckten Saldos | nein |
+| `adjustments.yaml` | Korrektur eines falsch gedruckten Stands | nein |
 | `server.yaml` | Adresse und Anmeldung (`finctl passwort`) | nein |
 
 Sechs Dateien tragen `_custom` im Namen, weil es zu ihnen keine Basisdatei gab, und
 behalten ihn: `reihen_custom.yaml` (Takt einer Reihe, einmalig gesetzte Buchungen,
-zusammengeführte Schreibweisen; /reihen), `geteilt_custom.yaml` (Projekte, Personen, geteilte
-Buchungen), `zinssaetze_custom.yaml` (datierte Zinssätze je Konto) und
-`prognosebasis_custom.yaml` (was unter Prognosebasis abgewählt ist), beide auf /annahmen,
+zusammengeführte Schreibweisen; /reihen), `geteilt_custom.yaml` (Themenkassen, Beteiligte, zugeordnete
+Buchungen), `zinssaetze_custom.yaml` (datierte Zinssätze je Konto, auf /annahmen) und
+`prognosebasis_custom.yaml` (was unter Fortschreibung abgewählt ist, auf /prognosebasis),
 `module_custom.yaml` (welche Module an sind) und `csv_profile_custom.yaml` (selbst
 zugeordnete CSV-Exporte), beide in der Einrichtung. Eine Datei aus der Zeit davor, die noch
 `*_custom.yaml` heißt und zu einer der Dateien oben gehört, stellt
@@ -252,8 +254,8 @@ finctl umstellen --probe ~/umstieg-probe
 Der Ordner muss außerhalb des Datenordners liegen. Der Befehl ändert im Datenordner nichts:
 Er schreibt eine umgewandelte Kopie von `config/` nach `~/umstieg-probe/config` und einen
 Bericht nach `~/umstieg-probe/umstellung_<Datum>.md`. Im Terminal steht, wie viele Dateien
-umgewandelt und welche Paare zusammengelegt würden. Scheitert eine Prüfung, wandelt der Befehl
-nichts um und nennt die Gründe.
+umgewandelt und welche Paare zusammengelegt würden. Gibt es nichts umzustellen oder scheitert eine
+Prüfung, schreibt er keine Kopie, wandelt nichts um und sagt, warum.
 
 Im Bericht stehen zuerst die Paare, je eines unter „Zusammengelegt: …“, danach die
 Kommentarzeilen je Datei, was wegfällt und jeder Kommentar mit seinem neuen Ort. Bei den Paaren
@@ -289,7 +291,8 @@ Kommentare, die nur den Wert in Euro wiederholen. Alles andere steht als Notiz d
   Sie bekommt ein Datum oder wird gelöscht.
 - **Untergrenze aus dem Kredit:** In `forecast.yaml` trägt jedes `floor_from_loan` die Kennung
   eines Kredits, nicht `true`. Ältere Fassungen machten beim Speichern der Kontokarte daraus
-  `true`; dann gilt die Untergrenze aus dem Kredit nicht mehr.
+  `true`; dann gilt die Untergrenze aus dem Kredit nicht mehr. Die Kontokarte zeigt ein solches
+  `true` als „kein Kredit gewählt“ und bietet die Kredite aus `loans.yaml` zur Wahl an.
 - **Kredite:** Ältere Fassungen löschten beim Speichern einer Anschlusskondition auf
   **Kredite** die dort angelegten Kredite und Vorlagen. Fehlen welche, die eine ältere Sicherung
   noch hat, hol sie dort zurück. Bis zum Umstieg speicherst du mit der älteren Fassung keine
@@ -312,18 +315,21 @@ Kommentare, die nur den Wert in Euro wiederholen. Alles andere steht als Notiz d
 
 Ältere Fassungen legten die Untergrenze je Konto (`floor_cents:<konto>`) und eine Notiz dazu
 zusätzlich in der Tabelle `settings` der Datenbank ab. Vor jedem Lauf, auch bei `--probe`,
-vergleicht `finctl umstellen` diese Tabelle mit der Datei der Einstellungen (`*_custom.yaml`).
-Steht in der Tabelle eine Zeile, die die Datei nicht hat, ein anderer Wert oder eine Notiz, die
-in keiner Datei steht, **wandelt der Befehl nichts um**, nennt jede Zeile („Tabelle settings,
-Zeile …“) und beendet sich mit einem Fehler. Die App hält aus demselben Grund an.
+vergleicht `finctl umstellen` sie mit der Datei der Einstellungen. Er
+**wandelt nichts um**, nennt jede Zeile („Tabelle settings, Zeile …“) und beendet sich mit einem
+Fehler, wenn
 
-Geh die genannten Zeilen durch. Was du behalten willst, trägst du in der Datei ein: den Wert
-unter `einstellungen:` mit seinem Schlüssel, eine Notiz unter `notizen:`. Danach löschst du die
-Zeile aus der Tabelle (`DELETE FROM settings WHERE key = '…'` in `data/finance.db`, nach der
-Kopie vom Tag des Umstiegs); mit einer Zeile, die du nicht willst, tust du dasselbe. Eine
-Notiz in der Tabelle hält den Abgleich immer an, auch wenn sie in der Datei steht. Danach
-läuft `--probe` noch einmal. Eine Zeile, die nur in der Datei steht, ist kein Fund, und nach
-dem Umstieg liest niemand die Tabelle.
+- die Tabelle eine Zeile hat, die die Datei nicht hat,
+- ihr Wert abweicht und die Zeile neuer ist als die Datei, oder
+- eine Notiz der Tabelle in keiner Notiz der Datei steht.
+
+Die App hält aus demselben Grund an. Ist die Datei neuer als die Zeile, gilt die Datei, und der
+Bericht nennt es.
+
+Was du behalten willst, trägst du in der Datei ein: den Wert unter `einstellungen:`, die Notiz
+unter `notizen:`. Danach läuft der Befehl durch. Was du nicht willst, verwirfst du mit
+`finctl umstellen --tabelle-verwerfen`; der Bericht hält fest, was dabei wegfällt. Nach dem
+Umstellen ist die Tabelle aus der Datenbank entfernt. SQL brauchst du dafür nicht.
 
 ### Am Tag selbst
 
@@ -398,7 +404,7 @@ trifft auch, wenn das PDF `WEG Muster str.` gerendert hat.
 
 **Aktionen:** `mgmt`, `tax`, `property`, `loan`, `transfer_account`, `note`
 
-### Eine Zahlung aufteilen
+### Eine Buchung in Teile zerlegen
 
 ```yaml
     split:
@@ -410,7 +416,7 @@ trifft auch, wenn das PDF `WEG Muster str.` gerendert hat.
 Der letzte Eintrag ohne Betrag bekommt die Differenz, damit die Teile **immer** exakt
 auf die Buchung aufgehen. Alternativ `pct:` statt `amount:`.
 
-Ein Split, den du im Dashboard machst, gilt nur für die eine Buchung. Eine Regel mit
+Eine Teilung, die du im Dashboard machst, gilt nur für die eine Buchung. Eine Regel mit
 `split:` gilt für alle — vergangene wie künftige.
 
 ### Zwei Fallen, die schon zugeschlagen haben
@@ -426,8 +432,8 @@ beide in die Liste.
 
 ## 3b. PayPal auflösen
 
-Eine PayPal-Zahlung kommt auf dem Kontoauszug als „PayPal Europe S.a.r.l." an —
-ohne Händler, ohne Person, ohne Grund. Das ist der Grund, warum diese Buchungen am
+Eine PayPal-Buchung kommt auf dem Auszug als „PayPal Europe S.a.r.l." an —
+ohne Händler, ohne Gegenpartei, ohne Grund. Das ist der Grund, warum diese Buchungen am
 längsten unkategorisiert bleiben.
 
 PayPal-Export ziehen (Aktivitäten → Berichte → Kontoauszüge, CSV), dann:
@@ -437,10 +443,10 @@ finctl paypal ~/Downloads/<export>.CSV --year 2025
 ```
 
 Das nennt zu jeder offenen Buchung die Gegenpartei und schlägt eine Kategorie vor —
-aus **deinen eigenen früheren Entscheidungen** zu derselben Person, nicht geraten.
+aus **deinen eigenen früheren Entscheidungen** zur selben Gegenpartei, nicht geraten.
 
-**Es schreibt nichts.** Wofür eine Zahlung an einen Freund war, steht in keiner der
-beiden Dateien — dieselbe Person ist einen Monat Gastronomie und den nächsten
+**Es schreibt nichts.** Wofür eine Buchung an einen Freund war, steht in keiner der
+beiden Dateien — dieselbe Gegenpartei ist einen Monat Gastronomie und den nächsten
 Geschenke. Zuordnen im Dashboard oder mit `finctl split`.
 
 ---
@@ -461,10 +467,10 @@ Ablauf für eine Erklärung:
    Fehler: Anlage V ist ein Formular **pro Objekt**.
 4. Beträge nach WISO übertragen.
 5. **AfA steht bewusst nicht auf dieser Seite.** Sie kostet kein Geld und steht in
-   keinem Kontoauszug. Sie kommt aus `properties.yaml` und ist unter **Immobilien**
+   keinem Auszug. Sie kommt aus `properties.yaml` und ist unter **Objekte**
    sichtbar.
 
-In der Transaktionstabelle filtert das Feld **Steuer** auf derselben Achse,
+In der Tabelle der Buchungen filtert das Feld **Steuer** auf derselben Achse,
 mehrfach wählbar. `— ohne Steuerposition —` findet genau die Lücken aus Schritt 2.
 
 ---
@@ -473,8 +479,8 @@ mehrfach wählbar. `— ohne Steuerposition —` findet genau die Lücken aus Sc
 
 Reiter **Prognose**.
 
-Fortgeschrieben wird in zwei Teilen. Eine Zahlung mit festem Takt ([/reihen](#reihen)) —
-Miete, ein Abo, eine Jahresprämie, die Grundsteuer im Quartal — steht als eigener Posten
+Fortgeschrieben wird in zwei Teilen. Eine Reihe mit festem Takt ([/reihen](#reihen)) —
+Miete, ein Vertrag, eine Jahresprämie, die Grundsteuer im Quartal — steht als eigener Posten
 mit ihrem **Betrag je Termin** an ihrem Termin, nicht auf Zwölftel geglättet, damit die
 Dispo-Warnung die richtige Talsohle sieht. Eine Reihe, deren nächster Termin lange
 überfällig ist, ist beendet und kommt nicht mehr vor; ein Dauerauftrag, der das Konto
@@ -561,14 +567,14 @@ finctl init && finctl ingest run && finctl categorize && finctl validate
 |---|---|---|
 | `rejected` beim Einlesen | Saldo geht nicht auf | Der Auszug bleibt draußen. Parser prüfen, oder Sonderfall in `adjustments.yaml`. |
 | `gap on <konto>` | Auszug fehlt in der Kette | Fehlenden Auszug nachlegen. |
-| Viele Buchungen unter Offen | Neuer Zahlungsempfänger | Regel schreiben oder im Dashboard einzeln zuordnen. |
+| Viele Buchungen unter Offen | Neue Gegenpartei | Regel schreiben oder im Dashboard einzeln zuordnen. |
 | „Regeln, denen du widersprichst" | Dieselbe Regel oft korrigiert | Die Regel ist falsch. Knopf **Regel ändern** oder `rules.yaml` bearbeiten. |
 | Kategorie verschwunden | Umbenannt ohne Migration | Eintrag in `taxonomy_migrations.yaml` unter `remap:`. |
 | `command not found: finctl` | Nicht installiert oder nicht im Pfad | `uv tool install` bzw. `pipx install` erneut, oder aus dem Quellcode-Ordner `.venv/bin/finctl`. |
 | `Kein config/ unter …` oder ein leeres Hauptbuch | Der falsche Datenordner | `finctl ort` zeigt, welcher es ist und warum. Stimmt er nicht: `finctl ort --setzen <ordner>`. |
 | Zahl ändert sich nach `init` | YAML überschreibt | So gewollt: YAML gewinnt, wo es etwas sagt. |
 | „… ist noch nicht umgestellt“ beim Start oder bei einem Befehl | Eine Datei trägt noch Kommentare, alte Feldnamen oder eine zweite Datei (`*_custom.yaml`) | `finctl umstellen --probe <ordner>` ansehen, dann `finctl umstellen`. Siehe Abschnitt 2b. |
-| `finctl umstellen` schreibt nichts und nennt „Tabelle settings, Zeile …“ | Die Tabelle kennt einen Wert oder eine Notiz, die in keiner Datei steht | Zeile in die Datei übernehmen und aus der Tabelle löschen. Siehe Abschnitt 2b. |
+| `finctl umstellen` schreibt nichts und nennt „Tabelle settings, Zeile …“ | Die Tabelle kennt einen Wert oder eine Notiz, die in keiner Datei steht | Zeile in die Datei übernehmen oder mit `finctl umstellen --tabelle-verwerfen` verwerfen. Siehe Abschnitt 2b. |
 
 Nichts wird automatisch umgeschrieben. Der Regelsatz ändert sich nur, wenn du ihn
 änderst — auch dann nicht, wenn du derselben Regel vierzigmal widersprochen hast. Sie
@@ -611,12 +617,12 @@ Kennzahlen des laufenden Jahres.
 - **Die Seite hakt sich selbst ab.** Eine Zeile ist erledigt, wenn die Daten es belegen:
   ein Auszug, der den Vormonat abdeckt, oder ein Stand aus diesem Monat. Ein Haken zum
   Anklicken wäre eine Behauptung neben den Daten, die falsch werden kann, ohne aufzufallen.
-- **Konten, Depots, Renten stehen je als eine Zeile** mit Haken, Wert und Notiz —
+- **Konten, Depots, Rentenquellen stehen je als eine Zeile** mit Haken, Stand und Notiz —
   geprüft und gepflegt an derselben Stelle. Einzelheiten unter
   [Stände](#monatsabschluss-konten-depots-renten).
 - **Rot steht nur dort, wo etwas klemmt.** Eine Seite, auf der alles leuchtet, liest man
   nach dem zweiten Monat nicht mehr.
-- Das **Backup** kommt zum Schluss: es soll den Stand sichern, den du gerade durchgesehen
+- Die **Sicherung** kommt zum Schluss: es soll den Stand sichern, den du gerade durchgesehen
   hast, und nicht den davor.
 - Die **Wirkung auf deine Ziele** zeigt, wie weit sich jedes Ziel gegenüber dem Vormonat
   bewegt hat und warum. Einzelheiten unter
@@ -634,26 +640,30 @@ rotes ○ davor und sie zählt oben bei „offen" mit.
 | Rentenversicherungen | getippt, nach der Standmitteilung | der Stand aus dem laufenden Jahr ist |
 | Renten laut Mitteilung | getippt, nach Renteninformation und Standmitteilung | das Schreiben aus dem laufenden Jahr ist |
 
-- **Der Saldo eines Kontos** ist der am letzten Monatsende, das alle Auszüge abdecken —
+- **Der Stand eines Kontos** ist der am letzten Monatsende, das alle Auszüge abdecken —
   derselbe Stichtag, an dem die Kontenvorschau beginnt. Wie weit der neueste Auszug
   reicht, steht als Beleg daneben.
-- **Getippte Werte** werden genannt, nicht gemessen, und brauchen genau deshalb diesen
+- **Getippte Stände** werden genannt, nicht gemessen, und brauchen genau deshalb diesen
   Ort: ein Depotwert, der nur in einer Datei änderbar ist, ist bald still falsch, während
   der Zielfortschritt darauf weiter präzise aussieht.
-- **Unverändert** legt denselben Wert mit heutigem Datum ab, ein Klick. Wer tippt, dessen
-  Knopf heißt „Speichern"; ein neuer Wert zieht den Stand auf heute, solange du ihn nicht
-  selbst setzt. Der Stand gehört zu jedem Wert: ein alter Bestand, der sagt, wann er alt
+- **Unverändert** legt denselben Stand mit heutigem Datum ab, ein Klick. Wer tippt, dessen
+  Knopf heißt „Speichern"; ein neuer Stand zieht das Datum auf heute, solange du es nicht
+  selbst setzt. Das Datum gehört zu jedem Stand: ein alter Bestand, der sagt, wann er alt
   ist, bleibt benutzbar.
 - **Die Notiz** ist bei jeder Position änderbar, auch bei Konten: dass ein Teil des
-  Saldos jemand anderem gehört, steht in keinem Auszug. Gespeichert wird die
+  Stands jemand anderem gehört, steht in keinem Auszug. Gespeichert wird die
   ganze Position in `balances.yaml`; eine leere Notiz löscht sie samt Datum.
 - **Renten laut Mitteilung** stehen hier nur zur Prüfung, ob das Schreiben aus diesem
-  Jahr ist. Gepflegt werden sie unter [Renten](#renten).
+  Jahr ist. Gepflegt werden sie unter [Rentenquellen](#renten).
 - **Rückkaufswert** (nur Rentenversicherungen): Unter der Zeile der Police stehen die
   Angaben der Standmitteilung — Rückkaufswert, eingezahlte Beiträge, ihr Policenwert und der
   Stand. Sie gehen zusammen weg. Daraus rechnet [Konten](#konten) den Notfallwert; das Feld
   „Policenwert laut Mitteilung“ darf leer bleiben, solange es denselben Stand hat wie die
   Zeile.
+- **Position anlegen:** Ein Depot, Krypto, Tagesgeld oder eine Rentenversicherung gehört zu einem
+  Konto ohne Auszug. Das Konto legst du zuerst in der Einrichtung an; hier trägst du Art, Stand,
+  Stichtag und Notiz ein. **Entfernen** nimmt die Position samt Notiz und Verlauf aus
+  `balances.yaml`; das Konto bleibt.
 - **davon Gewinn** (nur Depots): wie in der Depot-App. Die Hochrechnung versteuert ihn
   beim Verkauf; leer gilt der ganze Wert als Einstand.
 - **Verbindlichkeiten** werden hier nicht gepflegt. Geld, das jemand anderem gehört,
@@ -672,10 +682,10 @@ letzten drei Monate.
   erwartet), „Tempo" je Bereich, „Gehalt", „Planzeilen".
 - **Tempo** nennt die Kategorien, deren Jahreswert sich geändert hat, mit dem Monat, der aus
   dem Zeitraum fiel, und dem, der dazukam, je mit Betrag und Zahl der Buchungen. So siehst du,
-  ob sich ein Betrag geändert hat oder nur ein Zahlungstag über das Monatsende gerutscht ist.
-  Das Urteil trifft die Seite nicht. Wo eine Zahlung zu einer [Reihe](#reihen) mit festem Takt
+  ob sich ein Betrag geändert hat oder nur ein Buchungstag über das Monatsende gerutscht ist.
+  Das Urteil trifft die Seite nicht. Wo eine Buchung zu einer [Reihe](#reihen) mit festem Takt
   gehört, nennt die Zeile die Reihe, die sich bewegt hat — begonnen, beendet oder ein anderer
-  Betrag je Termin —, und dazu den Rest mit seinen Monaten; ein Zahlungstag, der über das
+  Betrag je Termin —, und dazu den Rest mit seinen Monaten; ein Buchungstag, der über das
   Monatsende rutscht, bewegt keine Reihe.
 - **Der Monat** hat Hinweise in Euro des Monats: Prognose gegen Ist und die Kursbewegung der
   Depots. Sie gehören nicht zur Wirkung, denn die läuft bis zum Stichdatum weiter.
@@ -694,16 +704,17 @@ Monatsanfang, das Gehalt am Ende, und der Monatsendstand verbirgt genau die Dell
 die es geht. Die Kennzahl oben sagt, ob der Haushalt sich ohne das große Objekt trägt —
 ohne Umbuchungen zwischen eigenen Konten, ohne Kaufraten, ohne Investments.
 
-- **Zufluss** ist ein deklarierter Dauerauftrag, kein gemessener Wert: ein Budget ist eine
-  Entscheidung, und Historie sieht keine Entscheidung.
+- **Zufluss** ist ein deklarierter Dauerauftrag, kein gemessener Wert, sondern eine
+  Entscheidung.
 - **Deckel** gibt es nur beim Betriebskonto: Guthaben dort wird nicht verzinst, alles
   darüber gehört aufs Tagesgeld. **Abräumen** ist deshalb ein Auftrag, kein Befund.
 - Die **Reihenfolge ist die Regel**: erst auffüllen, was unter seine Grenze fiele, dann
   erst den Rest aufs Tagesgeld. Sonst würde gespart, während ein Girokonto im Dispo steht.
 - **Bewusst pessimistisch**: Kosten ohne Tag zählen früh, Einnahmen spät, das Gehalt mit
-  seiner Untergrenze. Eine übersehene Delle kostet Dispozinsen.
-- Eine Zahlung gilt nur als gedeckt, wenn die Umbuchung dorthin datiert dasteht. Sonst
+  seiner Untergrenze.
+- Eine Buchung gilt nur als gedeckt, wenn die Umbuchung dorthin datiert dasteht. Sonst
   sieht das Konto den Abfluss ohne den Zufluss.
+- **Untergrenze aus einem Kredit**: eine Monatsrate des gewählten Kredits.
 - Der **Notgroschen** (Ziele) ist die Untergrenze des Tagesgeldkontos, wenn er höher liegt;
   eine Klammer, die ihn angreift, löst die Warnung aus.
 - **Policen im Notfall**: Rückkaufswert nach Steuer, nur zur Anzeige; „mind.“: eingezahlt fehlt.
@@ -745,27 +756,31 @@ ein Auszug gelesen wird und wo er liegt.
 - **Warnen unter** ist die Schwelle, ab der die Delle auf [Konten](#konten) gemeldet
   wird. Für ein Girokonto mit Dispo ist das die wichtigste Zahl der Seite.
 - **Auszüge in** ist ein Ordnername unter `data/statements/`: im Datenordner, also im
-  Backup und beim Umzug dabei. Ein voller Pfad ist erlaubt, wird aber nicht
+  Sicherung und beim Umzug dabei. Ein voller Pfad ist erlaubt, wird aber nicht
   mitgesichert und zeigt auf einem anderen Rechner ins Leere — die Seite schreibt
   beim Tippen mit, wohin die Dateien kommen.
 - Angelegt wird in `accounts.yaml`, hinter den Konten, die dort stehen; ihre Notizen
   bleiben.
+- **Öffnen** bearbeitet ein Konto: Namen, Art, Einlesen, Schwelle, Auszugsordner und
+  Notiz. Die Kennung bleibt. **Geschlossen am** nimmt das Konto aus jeder Auswahl, die
+  Buchungen bleiben; leer öffnet es wieder. Ein anderer Auszugsordner verschiebt keine
+  Dateien.
 - **Auszug erkennen:** eine Datei aus dem Online-Banking wählen. Die App nennt
   Bank, Konto, Zeitraum und ob der Auszug aufgeht, und füllt damit das Formular für
   ein neues Konto — oder legt die Datei in ein Konto, das dieselbe Bank schon liest.
-  Beschrieben sind die CSV-Exporte von ING, comdirect, DKB, Sparkasse, Volks- und
+  Beschrieben sind die Auszüge als CSV von ING, comdirect, DKB, Sparkasse, Volks- und
   Raiffeisenbanken, Commerzbank und N26, nach Beschreibung, noch nicht an echten
   Exporten geprüft.
   **Sparkasse:** im Online-Banking unter *Umsätze → Exportieren* das Format **CSV-CAMT V2**
   oder **CSV-CAMT V8** wählen (gleiche Spalten), ersatzweise **CSV-MT940**; je Konto eine
   Datei, den Zeitraum bis zum Monatsletzten (oder bis heute). Das PDF der Umsatzliste und
-  „CSV mit Kategorien“ liest die App nicht. Die Sparkasse-CSV trägt keinen Saldo: den Kontostand trägst du im
-  Monatsabschluss unter *Konten* einmal ein („Kontostand laut Online-Banking“, mit Datum);
-  von dort rechnet die App mit den Umsätzen vor und zurück. Bis dahin steht dort „Kontostand
+  „CSV mit Kategorien“ liest die App nicht. Die Sparkasse-CSV trägt keinen Stand: den Stand trägst du im
+  Monatsabschluss unter *Konten* einmal ein („Stand laut Online-Banking“, mit Datum);
+  von dort rechnet die App mit den Buchungen vor und zurück. Bis dahin steht dort „Stand
   fehlt: einmal eintragen“ und die Zeile bleibt offen. Vorgemerkte
-  Umsätze fehlen, bis sie gebucht sind; der nächste Export bringt sie.
-- **Spalten zuordnen:** kennt die App einen CSV-Export nicht, schlägt sie vor, welche
-  Spalte Datum, Betrag, Gegenpartei und Saldo ist. Nach der Vorschau wird daraus ein
+  Buchungen fehlen, bis sie gebucht sind; der nächste Auszug bringt sie.
+- **Spalten zuordnen:** kennt die App einen Auszug als CSV nicht, schlägt sie vor, welche
+  Spalte Datum, Betrag, Gegenpartei und Stand ist. Nach der Vorschau wird daraus ein
   eigenes Profil in `config/csv_profile_custom.yaml`; ab dann wird die Bank erkannt.
 - **Beispiel für eine fehlende Bank:** `finctl anonymisieren DATEI --name "Vorname Nachname"`
   schreibt eine Kopie ohne Namen, IBANs und Nummern; Datum und Beträge bleiben,
@@ -783,30 +798,30 @@ eingeschaltete Pläne eintreten. Erst beide zusammen sagen, ob du ankommst.
   dort nicht.
 - Jedes Ziel misst gegen dasselbe liquide Vermögen, außer es trägt eine eigene **Basis**.
   Nichts angehakt heißt: alles, abzüglich Verbindlichkeiten und Notgroschen.
-- Die **Rentenlücke** ist gerechnet: Ausgaben im ersten vollen Rentenjahr minus Renten
+- Die **Rentenlücke** ist gerechnet: Ausgaben im ersten vollen Rentenjahr minus Rentenquellen
   und Mieten, entnommen bis zur Lebenserwartung. Gedreht wird auf [Annahmen](#annahmen).
 - Die Extrapolation steht **zweimal** da: im Schnitt und im Tempo der letzten drei Monate.
   Liegt der Stichtag im Horizont von [/konten](#konten), steht sie **einmal** da,
   „vorausgerechnet“ aus dem Stand der Konten mit den eingeschalteten Klammern.
 - Ein Ziel **ohne Stichtag** bekommt weder Extrapolation noch zweite Rate.
 - Die Karte nennt zwei **Monatsraten**: vorn die vorsichtige **ohne Rendite**, dahinter die
-  **mit Rendite** nach den Sätzen der Hochrechnung; die Herleitung steht im **Rechenweg**.
-- Die **Notiz** hält die Herleitung fest, damit niemand die Zahl „korrigiert“.
+  **mit Rendite** nach den Sätzen der Hochrechnung; der **Rechenweg** zeigt sie.
+- Die **Notiz** hält fest, woher die Zahl kommt, damit niemand sie „korrigiert“.
   **Löschen** nimmt Ziel und Notiz aus `goals.yaml`.
 
 ### /planung
 
-Alles, was noch nicht im Ledger steht, als **Klammern** mit beliebig vielen Positionen.
+Alles, was noch nicht in den Buchungen steht, als **Klammern** mit beliebig vielen Planzeilen.
 
-- **Verpflichtungen** gelten in jeder Projektion; **Pläne** sind Optionen und lassen
+- **Verpflichtungen** gelten in jeder Hochrechnung; die übrigen Klammern sind Optionen und lassen
   sich schalten. Der Schalter bewegt Kontenvorschau, Jahresrechnung und Ziele gemeinsam.
-- Eine Position ist ein **Betrag**, ein **Wegfall** oder eine **erwartete Einnahme**
+- Eine Planzeile ist ein **Betrag**, ein **Wegfall** oder eine **erwartete Einnahme**
   (Schenkung): Sie ersetzt ihre zugeordneten Buchungen und zählt voll.
 - **Teilzeit**: Anteil und Beginn aus den Annahmen, die Klammer schaltet sie ein; Zeilen
   ohne Datum folgen.
 - Beträge werden **ohne Vorzeichen** eingetragen, die Richtung ist eine Auswahl.
 - Gemessen wird über die **zugeordneten Buchungen**, nie eingetippt. Ein Haken genügt:
-  dazu zählt die Reihe, derselbe Empfänger in derselben Kategorie. Ohne Zuordnung zieht
+  dazu zählt die Reihe, dieselbe Gegenpartei in derselben Kategorie. Ohne Zuordnung zieht
   ein Wegfall nichts ab.
 - Ein Wegfall nimmt in jeder Rechnung genau heraus, was sie für die Reihe fortschreibt.
   **Nur Kontoprognose** heißt: die Reihe verlässt nur dieses Konto, ausgegeben wird
@@ -819,7 +834,7 @@ Alles, was noch nicht im Ledger steht, als **Klammern** mit beliebig vielen Posi
 
 ### /renten
 
-Gesetzliche Rente, Fondsrenten und Policen: was im Ruhestand hereinkommt.
+Rentenquellen: gesetzliche Rente, Fondsrenten und Policen, was im Ruhestand hereinkommt.
 
 - **Anlegen**: Name, Monatsrente oder Kapital, Betrag laut Schreiben, Bezug ab. Immer
   nominal, wie im Schreiben; nennt es mehrere Wertentwicklungen, die mit 7 %.
@@ -835,7 +850,7 @@ Gesetzliche Rente, Fondsrenten und Policen: was im Ruhestand hereinkommt.
   der Prüfwert mit dem Satz, den die Mitteilung unterstellt, und die Auszahlung ohne und mit
   der Teilzeit aus den Annahmen.
 - Gespeichert wird der ganze Eintrag in `renten.yaml`. Ein Klick auf „löschen" nimmt die
-  Quelle aus der Datei; ihre Notiz geht mit.
+  Rentenquelle aus der Datei; die Rückfrage nennt den Anfang ihrer Notiz, die mitgeht.
 
 ### /annahmen
 
@@ -846,18 +861,28 @@ Rechnungen.
 - Gespeichert wird in `config/assumptions.yaml`. Ein leeres Feld nimmt die Angabe heraus, wo die App
   einen eigenen Wert kennt; sonst lehnt die Seite es ab.
 - Was die Stellschrauben bewirken, zeigt die [Hochrechnung](#hochrechnung).
+- **Steuersatz auf Kapitalerträge** und **Basiszins** stehen hier auch; den Satz setzt dein
+  persönlicher Satz, den Basiszins nennt das Bundesfinanzministerium jedes Jahr.
 - **Zinssätze je Konto**: Zeitraum und Satz. Ohne Eintrag zahlt ein Tagesgeld den
   langfristigen Satz, ein Girokonto nichts. /konten und die Hochrechnung rechnen damit Zinsen und
   Steuer selbst (ein Freibetrag für den Haushalt); eine Planzeile darauf zählt in keiner Prognose.
 - Was ein Objekt abwirft, steht am Objekt ([/immobilie](#immobilie), Prognose).
-- **Prognosebasis** (unten, aufklappbar) zeigt je Kategorie, was beide Rechnungen aus der
-  Messung fortschreiben. Gehalt: Untergrenze, jährlich gesteigert. Der Rest ist die Summe
-  der letzten zwölf Monate, in Konten durch zwölf geteilt. Ersetzen Vertrag, erwartete
-  Einnahme oder Objektprognose die Messung, zählen beide deren Posten; die Quelle steht darunter.
-  *unregelmäßig* heißt: in weniger als der Hälfte der Monate gebucht und trotzdem
-  fortgeschrieben. Abgewählt gilt für **beide** Rechnungen.
-- Verschieden bleibt nur, was die Hochrechnung allein kennt (**Kaskade**, **Rendite**,
-  Teilzeit, Verkauf, Ruhestand), und die Regeln der Konten.
+- Woraus Monatsmodell und Jahresrechnung fortschreiben, steht auf [/prognosebasis](#prognosebasis).
+
+### /prognosebasis
+
+Je Block eine Zeile: die Quelle, der Betrag im ersten Monat des Monatsmodells, der Betrag im ersten
+vollen Jahr der Jahresrechnung und die Seite, auf der der Haushalt die Quelle ändert. Die Seite
+rechnet nichts; sie ordnet die Posten, die beide Rechnungen selbst bilden.
+
+- **Fortschreibung** nennt das Messfenster und das Verfahren: die Zwölfmonatssumme, im
+  Monatsmodell durch zwölf geteilt. Reihen mit festem Takt zählen mit ihrem Betrag je Termin.
+- Ersetzt ein **Vertrag**, eine **erwartete Einnahme** oder eine **Objektprognose** die Messung, steht
+  sie als eigene Zeile, und die ersetzten Buchungen zählen in keiner Rechnung mehr.
+- Nennen beide Rechnungen dieselbe Quelle, steht sie einmal; sonst stehen beide.
+- **Nicht fortschreiben** (aufklappbar) wählt eine Kategorie für beide Rechnungen ab, etwa eine
+  Schenkung, die zufällig im Messfenster lag. *unregelmäßig* heißt: in weniger als der Hälfte der
+  Monate gebucht und trotzdem fortgeschrieben. Gespeichert wird in `config/prognosebasis_custom.yaml`.
 
 ### /hochrechnung
 
@@ -866,17 +891,17 @@ hier steht die Wirkung.
 
 - **Fluss** zeigt ein Jahr nach Grund: Planzeilen und Kredite mit Namen, Gemessenes je
   Block. Ein Klick führt zu den Buchungen dahinter, zur Klammer oder zum Kredit.
-- **Gespart** ist der Saldo des Jahres. Er geht aufs Tagesgeld, bis dessen Ziel erreicht
+- **Gespart** ist der Überschuss des Jahres. Er geht aufs Tagesgeld, bis dessen Ziel erreicht
   ist; was darüber liegt, wird ins Depot umgeschichtet („ins Depot" in der Tabelle).
   Rendite kommt obendrauf und steht nicht im Fluss: sie ist kein Geld, das hereinkommt.
-- **Im Ruhestand** zeigt jede Rente mit Beginn und dem Betrag, der dann nominal ankommt;
+- **Im Ruhestand** zeigt jede Rentenquelle mit Beginn und dem Betrag, der dann nominal ankommt;
   gepflegt wird sie im [Monatsabschluss](#monatsabschluss-konten-depots-renten).
   Gerechnet wird bis zur Lebenserwartung. Ab Rentenbeginn endet das Gehalt, die Renten
   kommen nach dem Abzug für Steuer und KV, und das Depot füllt das Tagesgeld auf.
   Oben steht, bis wann das Kapital reicht.
 - **Jahr für Jahr**: laufende Posten kommen aus den letzten zwölf vollständigen Monaten
   und wachsen ab deren Mitte mit der Inflation. Ein Klick auf das Jahr zeigt jeden
-  Posten mit Herleitung; die Posten ergeben genau die Summen der Zeile.
+  Posten im Rechenweg; die Posten ergeben genau die Summen der Zeile.
 - Das **laufende Jahr** zählt nur seine Restmonate, auch bei der Rendite.
 - **Tempo**: Konsum im Schnitt oder letzte drei Monate.
 
@@ -886,9 +911,9 @@ Vier Reiter auf dieselben Buchungen.
 
 - **Vorjahr** vergleicht je Kategorie **dieselben Monate** beider Jahre; ein
   angebrochenes Jahr gegen ein volles wiese überall eine Ersparnis aus. Beträge sind
-  **netto je Kategorie**: Erstattungen mindern die Position, in der sie anfallen.
+  **netto je Kategorie**: Erstattungen mindern die Kategorie, in der sie anfallen.
 - Eine Zeile ohne Buchungen im laufenden Jahr ist eingespart oder vergessen — bei einem
-  Abo derselbe Betrag mit sehr verschiedener Bedeutung.
+  Vertrag derselbe Betrag mit sehr verschiedener Bedeutung.
 - **Fixkosten** zeigt, was in der Taxonomie als `fix` markiert ist, **Alle Kategorien**
   alles außer Umbuchungen. Das Flag ist eine eigene Achse: KFZ-Steuer ist Fixkosten
   *und* Mobilität. Sitzt es falsch, fällt das im Vergleich beider Reiter auf und wird
@@ -908,7 +933,7 @@ Drei Reiter, derselbe Filter darunter:
 - **Offen** sind die Buchungen ohne Kategorie, größte zuerst. Kategorie wählen und Enter
   drücken; die Zeile wird blass, die nächste ist dran.
 - **Aufzuteilen** sind Buchungen, die eine Regel bewusst offen gelassen hat, weil eine
-  Zahlung mehrere Dinge abdeckt — meist Lastschriften eines Zahlungsdienstes.
+  Buchung mehrere Dinge abdeckt — meist Lastschriften eines Zahlungsdienstes.
 - Gespeicherte Zeilen gelten als **Handentscheidung**: ein erneutes Zuordnen aller
   Buchungen überschreibt sie nie.
 - **Offen** zeigt nur, was *keine* Kategorie hat. Eine Regel, die zu breit greift, ist
@@ -920,7 +945,7 @@ Drei Reiter, derselbe Filter darunter:
 
 ### /split
 
-Eine Buchung in ihre Teile zerlegen, wenn eine Zahlung mehrere Dinge abdeckt. Die Summe
+Eine Buchung in ihre Teile zerlegen, wenn sie mehrere Dinge abdeckt. Die Summe
 der Teile muss den Betrag der Buchung ergeben; jeder Teil trägt Kategorie,
 Steuerposition, Objekt und Notiz.
 
@@ -928,6 +953,10 @@ Steuerposition, Objekt und Notiz.
 
 Der Kategorienbaum: anlegen, umbenennen, stilllegen — und das `fix`-Flag setzen, das
 entscheidet, was unter Fixkosten erscheint.
+
+**Neue Oberkategorie** legt einen Ast ohne Kinder an (Einnahme oder Ausgabe); die
+Subkategorien kommen danach. **Fixkosten** und **Einmalig** stehen an der geöffneten
+Subkategorie; gilt schon der Wert des Asts, schreibt die Seite nichts.
 
 **Stilllegen tut zwei Dinge, die zusammen gehören**: die Buchungen wandern zur
 Ersatzkategorie, und jede Regel, die die alte Kennung nennt, muss umgehängt werden. Nur
@@ -938,7 +967,7 @@ deshalb je Zeile dabei.
 
 Welche Regel welche Buchung zuordnet.
 
-- Die **kleinere Priorität gewinnt**. Eigene Entscheidungen auf Transaktionen
+- Die **kleinere Priorität gewinnt**. Handentscheidungen auf Buchungen
   stehen über jeder Regel.
 - Die **Vorschau** zeigt vor dem Speichern, welche Buchungen eine Regel fängt und welche
   dadurch die Kategorie wechseln — eine zu breite Regel ordnet sonst still das halbe
@@ -947,12 +976,66 @@ Welche Regel welche Buchung zuordnet.
   Änderung ändert nichts.
 - **Allgemeine Regeln** liefert die App mit: Supermärkte, Tankstellen, Streaming,
   Steuern. Sie gelten nach allen eigenen und lassen sich einzeln oder ganz abschalten.
-- **Vorschläge über Claude**: Die App kopiert einen Auftrag mit den offenen Texten,
-  ohne Nummern und Beträge; die Antwort wird geprüft, übernommen wird nur Angehaktes.
+- **Vorschläge über ein KI-Modell** stehen unter [/vorlagen](#vorlagen): offene Texte ohne
+  Nummern und Beträge, die Antwort wird geprüft, übernommen wird nur Angehaktes.
+
+### /vorlagen
+
+Ein Text für ein KI-Modell deiner Wahl. Die App sendet nichts, solange du keine
+[Anbindung](#vorlagen-anbindung) einträgst: Du kopierst die Vorlage selbst ins Modell und fügst die
+Antwort wieder ein.
+
+- Eine **Vorlage** hat drei Teile: die **Begriffe** aus `CONTEXT.md`, die **Lage** aus denselben
+  Rechnungen wie die Seiten und die **Frage** mit der Form der Antwort. Auszugstexte und Nummern
+  stehen nie darin.
+- **Buchungen einordnen**: Die Lage hat die Kategorien und die Texte der offenen Buchungen, ohne
+  Beträge; abgewählte gehen nicht hinaus. Die Antwort sind Zeilen „Suchtext ; Kategorie“. Die
+  Seite zeigt, was jede fängt und wo sie einer Zuordnung widerspräche. Übernommen wird nur
+  Angehaktes, als Regel in `config/rules.yaml`.
+- **Monat erklären** hat die Summen je Oberkategorie gegen den Schnitt der zwölf Monate davor und
+  die offenen Punkte des Monatsabschlusses. **Frage zur Prognose** hat die Kontoprognose, das
+  Vermögen je Jahr und die Annahmen; die Frage schreibst du selbst.
+- Beide antworten mit „ZUSAMMENFASSUNG: …“ und „AUFFÄLLIG: Kennung ; Satz“. Die Seite markiert
+  Kennungen und Beträge, die nicht in der Lage stehen. Übernehmen lässt sich daraus nichts.
+- Namen von Konten und Kategorien und Beträge stehen in diesen beiden Texten; sie verlassen den
+  Rechner, sobald du sie in ein Modell außerhalb einfügst.
+
+### /vorlagen/anbindung
+
+Ein Modell kann die Vorlage auch von der App bekommen. Das ist **ausgeschaltet**, bis du hier
+einträgst: Adresse einer Schnittstelle in der Form „chat completions“, das Modell und, wenn sie
+einen verlangt, den Schlüssel. Ein Server auf diesem Rechner geht auch.
+
+- Auf [/vorlagen](#vorlagen) erscheint dann der Knopf **Senden …**. Er zeigt den ganzen Text, der
+  hinausgeht, und den Rechnernamen des Ziels: „Das verlässt den Rechner“. Bei `localhost`,
+  `127.0.0.1` und `::1` steht dort, dass der Text auf diesem Rechner bleibt. Gefragt wird jedes
+  Mal; „immer erlauben“ gibt es nicht.
+- Die Antwort steht im Feld wie eine eingefügte und wird genauso geprüft. Übernommen wird nur, was
+  du bestätigst.
+- Adresse und Modell stehen in `config/anbindung.yaml`. Der **Schlüssel** nicht: Er liegt in
+  der Datei `anbindung.schluessel` im Datenordner, nur für dich lesbar, und wird nie wieder
+  angezeigt. Hier siehst du „eingetragen“ und kannst ihn entfernen.
+- Außer diesem Knopf sendet die App nichts, auch nicht im Hintergrund.
+
+### /vorschlaege
+
+Was ein Modell vorschlägt und was sich dadurch ändern würde. Ein Modell deiner Wahl liest über den
+Befehl `finctl mcp` deine Zahlen und kann Regeln, Planzeilen in einer Klammer, Kredite und Notizen
+vorschlagen. Ein lokales Modell ist der Standard: Dann verlässt nichts deinen Rechner.
+
+- **Einbinden:** Trage im Programm deines Modells einen MCP-Server über stdio ein, mit dem Befehl
+  `finctl mcp`. In der App ist es ihr Programm mit dem Argument `mcp`. Liegt dein Datenordner nicht
+  an der Vorgabe, setzt du `FINCTL_DATEN`. Der Befehl öffnet keinen Port.
+- Das Modell **liest** über dieselben Rechnungen wie die Seiten. Notizen, Anschriften und lange
+  Nummern gibt der Zugang nicht heraus.
+- Es **schreibt nie** in `config/`. Ein Vorschlag liegt in `data/vorschlaege/`, geprüft wie die
+  Seite ihn prüft.
+- **Übernehmen** schickt ihn an dieselbe Route wie das Formular, **Verwerfen** löscht ihn. Die
+  Navigation zeigt, wie viele offen sind.
 
 ### /reihen
 
-Wie oft jede Zahlung kommt. Eine **Reihe** ist derselbe Empfänger in derselben
+Wie oft jede Reihe zahlt. Eine **Reihe** ist dieselbe Gegenpartei in derselben
 Kategorie, über alle Konten. Ihren **Takt** erkennt die App aus den Buchungen der
 letzten zwei Jahre: monatlich, alle zwei, drei, vier oder sechs Monate, jährlich —
 oder unregelmäßig.
@@ -963,9 +1046,9 @@ oder unregelmäßig.
   rechnen mit Reihen; auf [/konten](#konten) gilt „läuft“ je Konto.
 - **Festlegen** gilt für die ganze Reihe, nur für das Wie oft; zurücknehmen stellt die
   Erkennung wieder her.
-- **Aufgeklappt** stehen die Termine. Ein *Ausreißer* kommt zusätzlich, der *frühere
+- **Aufgeklappt** stehen die Termine. Ein *einmaliger* Betrag kommt zusätzlich, der *frühere
   Betrag* liegt vor dem heutigen.
-- **Gehört zu** führt zwei Schreibweisen derselben Zahlung zu einer Reihe zusammen,
+- **Gehört zu** führt zwei Schreibweisen derselben Gegenpartei zu einer Reihe zusammen,
   damit beide Prognosen sie einmal zählen; Regeln und Verträge sehen weiter jede.
   Vorgeschlagen wird es, wo eine Reihe endet und eine gleich teure einen Takt später
   beginnt, geschrieben erst auf den Klick.
@@ -984,16 +1067,16 @@ Messfensters; der Beitrag in eine Police bleibt fest.
 - Einem Vertrag werden **seine Buchungen zugeordnet**. Er ersetzt sie dann in der
   Prognose, statt neben ihnen zu stehen, und die jüngste zeigt, ob der Betrag noch
   stimmt.
-- **Ein Haken genügt.** Dazu zählt die Reihe: derselbe Empfänger, dieselbe Kategorie,
+- **Ein Haken genügt.** Dazu zählt die Reihe: dieselbe Gegenpartei, dieselbe Kategorie,
   ein Betrag nahe dem Vertragsbetrag. Eine Beitragserhöhung bleibt drin, eine
-  Erstattung und ein Einkauf beim selben Empfänger nicht.
-- Was in der Kategorie **daneben** liegt, bleibt gemessen. Die Prognosebasis auf /annahmen sagt je
-  Kategorie, welcher Fall vorliegt.
+  Erstattung und ein Einkauf bei derselben Gegenpartei nicht.
+- Was in der Kategorie **daneben** liegt, bleibt gemessen. Ein Vertrag ohne
+  zugeordnete Buchung zählt doppelt.
 - **Gekündigt zum** genügt ebenso: beide Rechnungen hören am Stichtag auf. Eine
   Wegfall-Zeile brauchst du dafür nicht — die bleibt für Dinge ohne Vertrag. Hast du
   beides, zählt es einmal, und versprochen wird nie mehr als die Vertragsrate.
 - **Löschen** nimmt einen Vertrag samt Notiz aus `abos.yaml` bzw. `versicherungen.yaml`.
-- Unter **Geteilt** steht, wer mitzahlt. Rückzahlungen werden aus den Eingängen
+- Unter **Mitzahler** steht, wer mitzahlt. Rückzahlungen werden aus den Eingängen
   abgeglichen, nicht abgehakt: ein Haken wäre eine Behauptung neben den Daten.
 
 ### /immobilien
@@ -1034,10 +1117,10 @@ dazu.
 Die Tilgungspläne aus `config/loans.yaml`, je Kredit mit aktueller Kondition und
 Anschlussfinanzierung nebeneinander.
 
-- **Neues Annuitätendarlehen** legt einen Kredit mit einem Segment an: Restschuld, Zins,
-  Rate, Laufzeit. Ein Immobiliendarlehen entsteht hier nicht — dessen Zinsbindung und Anschluss
+- **Neuer Kredit** legt einen Kredit mit einem Segment an: Restschuld, Zins,
+  Rate, Laufzeit. Ein Kredit am Objekt entsteht hier nicht — dessen Zinsbindung und Anschluss
   stehen in `loans.yaml`.
-- **Entfernen** nimmt einen Kredit samt seiner Notiz aus `loans.yaml` und damit aus jeder
+- **Entfernen** nimmt einen Kredit samt Notiz aus `loans.yaml`, damit aus jeder
   Prognose.
 - **laut Plan** ist der Tilgungsplan über das ganze Jahr, auch die Monate, die noch
   kommen; **gebucht** kommt aus dem Ledger. Weichen sie ab, ist entweder der Plan falsch
@@ -1090,24 +1173,26 @@ ergibt sich.
 
 ### /projekte
 
-Ein Budgettopf sammelt Ausgaben, die zusammengehören: eine Reise, ein Umbau, ein
-Geschenk. Kategorie und Steuer bleiben davon unberührt; der Budgettopf ist eine eigene
-Achse daneben.
+Eine Themenkasse sammelt Ausgaben, die zusammengehören: eine gemeinsame Reise, ein Umbau, ein
+Geschenk. Sie wird von Hand gefüllt, Teil für Teil, nicht von Regeln. Kategorie und Steuer
+bleiben davon unberührt; die Themenkasse ist eine eigene Achse daneben.
 
-- **Mit Personen** wird geteilt, **ohne Personen** sammelt es nur die Kosten.
-- Eine zugeordnete Ausgabe ist gleich auf alle Personen und dich geteilt, bis du für
-  diese eine Buchung etwas anderes einstellst.
-- Aufgeklappt zeigt ein Budgettopf seine Buchungen mit den Anteilen, die Kosten nach
+- **Mit Beteiligten** wird geteilt, **ohne Beteiligte** sammelt sie nur die Kosten.
+- Ein zugeordneter Teil ist gleich auf alle Beteiligten und dich geteilt, bis du für
+  diese eine Buchung eine andere Teilung einstellst.
+- Aufgeklappt zeigt eine Themenkasse ihre Buchungen mit den Anteilen, die Kosten nach
   Kategorie und nach Monat.
-- Zugeordnet und geteilt wird unter „Buchungen".
+- Zugeordnet und geteilt wird unter „Zuordnen".
+- **Themenkasse entfernen** nimmt sie samt Notiz aus der Datei; die Rückfrage nennt den Anfang
+  der Notiz und wie viele Buchungen ihre Zuordnung verlieren.
 
 ### /salden
 
-Je Person und Budgettopf: ihr Anteil an den Ausgaben, und was davon offen ist.
+Je Beteiligtem und Themenkasse: sein Anteil an den Ausgaben, und was davon offen ist.
 
 - **Rückzahlungen werden nicht verfolgt.** Was andere für dich ausgelegt haben, steht
-  in keinem deiner Auszüge; ein Saldo daraus wäre nur halb richtig.
-- Stattdessen gibt es je Person und Budgettopf den Haken **„ausgeglichen"**. Er merkt sich
+  in keinem deiner Auszüge; ein Betrag daraus wäre nur halb richtig.
+- Stattdessen gibt es je Beteiligtem und Themenkasse den Haken **„ausgeglichen"**. Er merkt sich
   den Anteil beim Abhaken. Kommt danach eine Ausgabe dazu, ist genau die Differenz
   wieder offen.
 - Eine Rückzahlung gehört im Ledger in dieselbe Kategorie wie die Ausgabe, positiv. So
@@ -1118,9 +1203,9 @@ Je Person und Budgettopf: ihr Anteil an den Ausgaben, und was davon offen ist.
 Die schlanke Buchungstabelle nur zum Zuordnen. Die Kategorie ist Anzeige und Filter,
 nicht änderbar; dafür gibt es /transactions.
 
-- **Eine Zeile je Aufteilungsteil.** Bei einem aufgeteilten Einkauf lässt sich so nur
-  der Teil zuordnen, der zum Budgettopf gehört.
-- **Mehrere auf einmal:** Zeilen markieren, Budgettopf wählen, „Markierte zuordnen".
+- **Eine Zeile je Teil.** Bei einer in Teile zerlegten Buchung lässt sich so nur
+  der Teil zuordnen, der zur Themenkasse gehört.
+- **Mehrere auf einmal:** Zeilen markieren, Themenkasse wählen, „Markierte zuordnen".
 - **Teilung** je Buchung: gleich, feste Beträge, Prozent, Gewichte oder nur ich. Die
   Vorschau zeigt die Beträge, bevor gespeichert wird.
 - Alles steht in `config/geteilt_custom.yaml`, geschlüsselt über die Buchung selbst,

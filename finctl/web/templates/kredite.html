@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block n_kredite %}on{% endblock %}
 {% block title %}Kredite{% endblock %}
 {% block body %}
+{% import "_notiz.html" as nz %}
 <h1>Kredite</h1>
 <p class="zweck">Was jede Rate tilgt, was sie verzinst und wann der Kredit abbezahlt ist.</p>
 
@@ -27,9 +28,10 @@
 {# Fremde Vertraege muessen weg koennen: eine Rate, die niemand zahlt,
    drueckt den Tiefpunkt jedes Monats. #}
 <p class="zeilen-knoepfe" style="margin:0 0 .6rem">
-  <button type="button" class="ghost" onclick="kreditEntfernen('{{ l.id }}', '{{ l.name }}')"
-    >Entfernen</button>
+  <button type="button" class="ghost" onclick="kreditEntfernen(this, '{{ l.id }}', '{{ l.name }}')"
+    {{- nz.geht_mit(l.notiz) }}>Entfernen</button>
   <span class="muted klein" id="weg-{{ l.id }}"></span></p>
+{{ nz.zeile(l.notiz, l.notiz_vom) }}
 
 {% if l.verkauf %}
 <div class="note" style="margin:.6rem 0">Endet durch Verkauf in der Klammer
@@ -49,7 +51,7 @@
 <div class="card" style="margin:.6rem 0">
   <div class="k klein" style="color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem">Grundkonditionen</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem">
-    <label>Darlehen (€)<br><input id="v-betrag-{{ l.id }}"
+    <label>Kredit (€)<br><input id="v-betrag-{{ l.id }}"
            value="{{ l.opening_cents|betrag }}"></label>
     <label>Sollzins (% p.a.)<br><input id="v-zins-{{ l.id }}"
            value="{{ ('%.2f'|format(l.zins_pct))|replace('.', ',') }}"></label>
@@ -263,7 +265,7 @@ function zuruecksetzen(knopf, id, gespeichert){
 }
 </script>
 <p style="margin:1.2rem 0 0"><button type="button" onclick="neuerKredit()"
-  id="neu-knopf">Neues Annuitätendarlehen</button></p>
+  id="neu-knopf">Neuer Kredit</button></p>
 
 <div id="neu-kredit" hidden class="card" style="margin-top:.8rem">
   <div class="felder">
@@ -317,8 +319,8 @@ async function kreditAnlegen(){
   else { kf_('meldung').textContent = o.error || 'fehlgeschlagen'; }
 }
 
-async function kreditEntfernen(id, name){
-  if(!confirm('Kredit „' + name + '“ entfernen? Er fällt aus jeder Prognose.')) return;
+async function kreditEntfernen(knopf, id, name){
+  if(!rueckfrage('Kredit „' + name + '“ entfernen? Er fällt aus jeder Prognose.', knopf)) return;
   const res = await fetch('/api/kredit-entfernen', {method:'POST',
     headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: id})});
   const o = await res.json();

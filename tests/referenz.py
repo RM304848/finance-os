@@ -532,6 +532,9 @@ def unterschiede(alt: Path, neu: Path, *, zeilen: int = 30, text: bool = True) -
         if rel.name == "meta.json":
             continue
         a, n = alt / rel, neu / rel
+        if rel.parts[0] == "hauptbuch" and a.exists() and not n.exists() \
+                and a.read_text(encoding="utf-8").strip() == "[]":
+            continue            # eine Tabelle ohne Zeilen und keine Tabelle: dieselben Zahlen
         if not a.exists() or not n.exists():
             funde.append(f"{rel}: {'fehlt jetzt' if a.exists() else 'ist neu'}")
             continue

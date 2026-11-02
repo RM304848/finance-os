@@ -12,6 +12,7 @@ from finctl.web.basis import (
     categories,
     conn,
     euro,
+    notiz_felder,
     tax_categories,
 )
 
@@ -44,6 +45,23 @@ def _regel_verweise_pruefen(c: sqlite3.Connection, e: dict) -> str | None:
     if fremd:
         return "unbekanntes Konto " + ", ".join(fremd)
     return None
+
+
+def regel_pruefen(c: sqlite3.Connection, body: dict) -> tuple[dict, list[dict]]:
+    """Die Regel aus dem Formular und das ganze Regelwerk danach, geprueft.
+
+    `ValueError` sagt, was nicht stimmt. Dieselbe Pruefung gilt fuer Vorschau,
+    Speichern und einen Vorschlag (`web/vorschlaege.py`).
+    """
+    from finctl.rules import engine
+    from finctl.rules import regelwerk as rw
+
+    e, alle = rw.entwurf(body)
+    engine.regeln_aus(alle)
+    fehler = _regel_verweise_pruefen(c, e)
+    if fehler:
+        raise ValueError(fehler)
+    return e, alle
 
 
 @router.get("/regeln", response_class=HTMLResponse)
@@ -103,6 +121,7 @@ def regeln_seite(request: Request, q: str = "", kategorie: str = "", aus: int | 
             "setzt": (namen.get(mgmt, mgmt) if mgmt else "Review" if s.get("review")
                       else "Aufteilung" if e.get("split") else "—"),
             "treffer": treffer.get(e["id"], 0), "herkunft": e["herkunft"],
+            **notiz_felder(e),
         })
     rows.sort(key=lambda r: (r["priority"], r["id"]))
     return TEMPLATES.TemplateResponse(request, "regeln.html", {
@@ -134,17 +153,13 @@ async def api_regeln_vorschau(request: Request):
     """Was die Regel im Formular fangen wuerde. Schreibt nichts."""
     from finctl.rules import categorize as cz
     from finctl.rules import engine
-    from finctl.rules import regelwerk as rw
 
     body = await request.json()
     c = conn()
     try:
         try:
-            e, alle = rw.entwurf(body)
+            e, alle = regel_pruefen(c, body)
             rules = engine.regeln_aus(alle)
-            fehler = _regel_verweise_pruefen(c, e)
-            if fehler:
-                raise ValueError(fehler)
         except ValueError as fehler:
             return JSONResponse({"error": str(fehler)}, status_code=400)
         out = cz.vorschau(c, rules, e["id"])
@@ -164,7 +179,6 @@ async def api_regeln(request: Request):
     genauso aussieht wie ein Knopf, der nichts tut -- so wurde es beim
     Umhaengen einer Regel schon einmal gemeldet.
     """
-    from finctl.rules import engine
     from finctl.rules import regelwerk as rw
     from finctl.rules.categorize import categorize
 
@@ -172,11 +186,7 @@ async def api_regeln(request: Request):
     c = conn()
     try:
         try:
-            e, alle = rw.entwurf(body)
-            engine.regeln_aus(alle)
-            fehler = _regel_verweise_pruefen(c, e)
-            if fehler:
-                raise ValueError(fehler)
+            e, _alle = regel_pruefen(c, body)
             rw.speichern(e)
         except ValueError as fehler:
             return JSONResponse({"error": str(fehler)}, status_code=400)
@@ -203,50 +213,7 @@ def api_regeln_entfernen(rule_id: str):
     return {"ok": True, "queue": result.unmatched}
 
 
-# ------------------------------------------------------- Vorschlaege (Claude)
-
-
-@router.post("/api/regeln/vorschlaege/prompt")
-async def api_vorschlaege_prompt(request: Request):
-    """Der Auftrag zum Kopieren. Die App schickt ihn nirgends hin."""
-    from finctl.rules import regelwerk as rw
-    from finctl.rules import vorschlaege as vs
-
-    body = await request.json()
-    erlaubt = set()
-    c = conn()
-    try:
-        erlaubt = {z["text"] for z in vs.offene_texte(c)}
-        kats = categories(c)
-    finally:
-        c.close()
-    # Nur Texte, die die Seite selbst angeboten hat -- also bereinigte.
-    texte = [str(x) for x in body.get("texte") or [] if str(x) in erlaubt]
-    if not texte:
-        return JSONResponse({"error": "Keinen Text gewählt."}, status_code=400)
-    regeln_je: dict[str, int] = {}
-    for e in rw.laden():
-        mgmt = (e.get("set") or {}).get("mgmt")
-        if mgmt:
-            regeln_je[mgmt] = regeln_je.get(mgmt, 0) + 1
-    return {"prompt": vs.prompt(kats, texte, regeln_je)}
-
-
-@router.post("/api/regeln/vorschlaege/pruefen")
-async def api_vorschlaege_pruefen(request: Request):
-    """Die eingefuegte Antwort lesen und gegen das Hauptbuch halten. Schreibt nichts."""
-    from finctl.rules import vorschlaege as vs
-
-    body = await request.json()
-    zeilen = vs.antwort_lesen(str(body.get("antwort") or ""))
-    if not zeilen:
-        return JSONResponse({"error": "Keine Zeile der Form „Suchtext ; Kategorie“ gefunden."},
-                            status_code=400)
-    c = conn()
-    try:
-        return {"zeilen": vs.pruefen(c, zeilen)}
-    finally:
-        c.close()
+# ------------------------------------------------------- Vorschlaege (KI-Modell)
 
 
 @router.post("/api/regeln/vorschlaege/uebernehmen")

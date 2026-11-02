@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% block n_abschluss %}on{% endblock %}
 {% block title %}Monatsabschluss{% endblock %}
 {% block body %}
+{% import "_notiz.html" as nz %}
 <h1>Monatsabschluss
   <span class="muted zusatz">— {{ monat_name }} {{ jahr }},
     {% if offen %}<strong class="neg">{{ offen }} von {{ gesamt }} offen</strong>
@@ -25,7 +26,7 @@
 {# Die Kacheln stehen hier, weil man diese Seite am Ersten ohnehin oeffnet:
    "wie steht es" gleich neben "was ist zu tun". #}
 {% set k = kacheln %}
-{% if k.ungleich %}<div class="note bad">{{ k.ungleich }} Split-Ungleichgewichte — das ist ein Fehler, keine Warnung.</div>{% endif %}
+{% if k.ungleich %}<div class="note bad">{{ k.ungleich }} Buchungen, deren Teile nicht ihren Betrag ergeben — das ist ein Fehler, keine Warnung.</div>{% endif %}
 {% for g in k.luecken %}<div class="note bad">Lücke auf {{ g.account_id }}: {{ g.after }} → {{ g.before }},
   {{ g.delta_cents|euro }} ungeklärt. Vermutlich fehlt ein Auszug.</div>{% endfor %}
 <div class="cards">
@@ -53,7 +54,7 @@
     <div class="muted klein">Prognose Ø <span class="{{ (ob.schnitt_prognose_cents or 0)|vz }}">{{ (ob.schnitt_prognose_cents or 0)|euro }}</span></div></a>
   {% endif %}
   {# Zwei Listen, zwei Links: die Kachel selbst fuehrt nirgends hin. #}
-  <div class="card"><div class="k">Transaktionen offen</div>
+  <div class="card"><div class="k">Buchungen offen</div>
     <div class="v">{{ k.review + k.flagged }}</div>
     <div class="muted klein"><a class="plain" href="/transactions?ansicht=offen">{{ k.review }} zuordnen →</a>
       · <a class="plain" href="/transactions?ansicht=aufteilen">{{ k.flagged }} aufteilen →</a></div></div>
@@ -130,14 +131,14 @@
   <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">
     — {{ g.erledigt }} von {{ g.zeilen|length }} aktuell
     {%- if g.id != 'renten' %} · <span class="{{ g.summe|vz }}">{{ g.summe|euro }}</span>{% endif %}
-    {%- if g.ohne_wert %} · {{ g.ohne_wert }} ohne Wert{% endif %}</span></h2>
+    {%- if g.ohne_wert %} · {{ g.ohne_wert }} ohne Stand{% endif %}</span></h2>
 <div class="wrap"><table class="staende{{ ' mit-gewinn' if mit_gewinn }}">
   <colgroup><col class="haken"><col class="pos"><col class="wert">
     {%- if mit_gewinn %}<col class="gewinn">{% endif %}<col class="stand">
     <col class="notiz"><col class="tun"></colgroup>
   <tr class="kopf"><th></th><th>{{ 'Konto' if konten else 'Position' }}</th>
-    <th class="num">{{ ('Saldo ' ~ g.stichtag) if konten and g.stichtag else 'Wert' }}</th>
-    {%- if mit_gewinn %}<th class="num" title="Wie in der Depot-App: Wert minus Kaufpreis. Leer: unbekannt">davon Gewinn</th>{% endif %}
+    <th class="num">{{ ('Stand ' ~ g.stichtag) if konten and g.stichtag else 'Stand' }}</th>
+    {%- if mit_gewinn %}<th class="num" title="Wie in der Depot-App: Stand minus Kaufpreis. Leer: unbekannt">davon Gewinn</th>{% endif %}
     <th>{{ 'Beleg' if konten else 'Stand' }}</th><th>Notiz</th><th></th></tr>
   {% for z in g.zeilen %}{% set p = z.p %}
   {# Renten werden auf /renten gepflegt; hier steht nur, ob das Schreiben aktuell ist. #}
@@ -149,14 +150,14 @@
       {%- else %}<span class="neg" title="Veraltet. {{ g.erklaerung }}">○</span>{% endif %}</td>
     {# Konten als Kennung (konten-als-kennung), der Anzeigename als Titel. #}
     <td>{% if konten %}<span title="{{ p.name }}">{{ z.key }}</span>{% else %}{{ p.name }}{% endif %}
-      {%- if z.ohne_saldo and z.anker_cents is none %}<br><span class="muted fein">Kontostand fehlt: einmal eintragen</span>{% endif %}
+      {%- if z.ohne_saldo and z.anker_cents is none %}<br><span class="muted fein">Stand fehlt: einmal eintragen</span>{% endif %}
       {%- if g.id == 'renten' %}<br><span class="muted fein">{{ p.zusatz }}</span>
       {%- if z.ab %}<br><span class="muted fein">Bezug ab {{ z.ab }}</span>{% endif %}
       {%- if z.kosten_hoch %} <span class="neg" title="Effektivkosten über deiner Schwelle">⚠</span>{% endif %}{% endif %}</td>
     {% if feld %}
     <td class="num"><input class="betrag" data-feld="wert" value="{{ (z.anker_cents if z.ohne_saldo else z.cents)|betrag }}"
-        placeholder="{{ 'Kontostand laut Online-Banking' if z.ohne_saldo else 'unbekannt' }}"
-        {%- if z.ohne_saldo %} title="Kontostand laut Online-Banking an dem Tag rechts. Von dort rechnet die App mit den Umsätzen vor und zurück."{% endif %}
+        placeholder="{{ 'Stand laut Online-Banking' if z.ohne_saldo else 'unbekannt' }}"
+        {%- if z.ohne_saldo %} title="Stand laut Online-Banking an dem Tag rechts. Von dort rechnet die App mit den Buchungen vor und zurück."{% endif %}
         oninput="standGeaendert(this)" onkeydown="standTaste(event)"></td>
     {%- if mit_gewinn %}
     <td class="num gewinn">{% if z.depot %}<input class="betrag" data-feld="gewinn"
@@ -177,12 +178,15 @@
     <td class="notiz">{% if bearbeiten and z.notiz and g.id != 'renten' %}<textarea class="still" data-feld="notiz" rows="1"
         placeholder="Notiz — woher, wem gehört es?"
         oninput="standGeaendert(this)" onkeydown="standTaste(event)">{{ z.note }}</textarea>
-      {%- else %}<span class="muted">{{ z.note }}</span>{% endif %}</td>
+      {%- else %}<span class="muted">{{ z.note }}</span>{% endif %}
+      {%- if z.note %}<div class="muted fein">Notiz {{ nz.stand(z.notiz_vom) }}</div>{% endif %}</td>
     <td class="tun">{% if g.id == 'renten' %}{% if seite_an("/renten") %}<a class="plain" href="/renten#rente-{{ z.key|e }}">pflegen →</a>{% endif %}
       {%- elif bearbeiten or z.ohne_saldo %}
       <button class="ghost" data-knopf onclick="standAblegen(this)"
         {%- if z.auszug or p.erledigt or z.cents is none %} hidden{% endif %}
-        title="Denselben Wert mit heutigem Datum ablegen">unverändert</button>
+        title="Denselben Stand mit heutigem Datum ablegen">unverändert</button>
+      {%- if z.notiz and not z.auszug %}
+      <button class="ghost" onclick="positionEntfernen(this)"{{ nz.geht_mit(z.note) }}>entfernen</button>{% endif %}
       <span class="meldung fein"></span>{% endif %}</td>
   </tr>
   {% if feld and g.id == 'jaehrlich' %}{% set r = z.rueckkauf %}
@@ -196,7 +200,7 @@
         placeholder="unbekannt" oninput="standGeaendert(this)" onkeydown="standTaste(event)"></label>
       <label class="muted klein">Policenwert laut Mitteilung <input class="betrag" data-feld="rpolice"
         value="{{ r.policenwert_cents|betrag if r and r.policenwert_cents is not none }}"
-        placeholder="wie oben" title="Leer: der Wert dieser Zeile, wenn beide denselben Stand haben"
+        placeholder="wie oben" title="Leer: der Stand dieser Zeile, wenn beide denselben Stand haben"
         oninput="standGeaendert(this)" onkeydown="standTaste(event)"></label>
       <label class="muted klein">Stand <input data-feld="rstand" value="{{ r.as_of if r }}"
         placeholder="2026-01-01" oninput="standGeaendert(this)"
@@ -207,6 +211,29 @@
 </table></div>
 {% endfor %}
 
+{% if bestand %}
+<details class="klapp" id="position-neu">
+  <summary>Position anlegen</summary>
+  {% if freie_konten %}
+  <div class="zeilen-form">
+    <label>Konto<select id="pn-konto" data-no-combo>
+      {% for k in freie_konten %}<option value="{{ k.id }}">{{ k.id }}</option>{% endfor %}
+    </select></label>
+    <label>Art<select id="pn-art" data-no-combo>
+      {% for id, name in positionsarten.items() %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
+    </select></label>
+    <label>Stand (€)<input id="pn-betrag" class="betrag" placeholder="12.000,00"></label>
+    <label>Stichtag<input id="pn-stand" placeholder="2026-01-01" value="{{ heute.isoformat() }}"></label>
+    <label>Notiz<textarea id="pn-notiz" class="notizfeld" rows="2"
+      placeholder="Notiz — woher, wem gehört es?"></textarea></label>
+  </div>
+  <p class="zeilen-knoepfe"><button onclick="positionAnlegen(this)">Anlegen</button></p>
+  {% else %}
+  <div class="note">Jede Position gehört zu einem Konto ohne Auszug. Lege das Konto zuerst
+    <a class="plain" href="/einrichtung#konten">in der Einrichtung</a> an.</div>
+  {% endif %}
+</details>
+{% endif %}
 
 {% if bestand and bestand.obligations %}
 {% set eine = bestand.obligations|length == 1 %}
@@ -315,6 +342,28 @@ function standAblegen(knopf){
   if (!body){ standSagen(tr, 'keine Zahl', 'bad'); return; }
   standPost(tr, body);
 }
+async function positionAnlegen(knopf){
+  const g = id => document.getElementById(id);
+  const r = await fetch('/api/bestand-neu', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({konto: g('pn-konto').value, art: g('pn-art').value,
+                          cents_text: g('pn-betrag').value, as_of: g('pn-stand').value.trim(),
+                          note: g('pn-notiz').value})});
+  const j = await r.json();
+  if (j.error){ g('pn-betrag').classList.toggle('feld-fehlt', j.feld === 'cents');
+                meldenNeben(knopf, j.error, true); return; }
+  meldenNeben(knopf, 'angelegt');
+  setTimeout(() => location.reload(), 600);
+}
+async function positionEntfernen(knopf){
+  const tr = knopf.closest('tr');
+  if (!rueckfrage('Position „' + tr.dataset.key + '“ entfernen? Sie fällt aus jeder Rechnung, '
+                  + 'ihr Verlauf geht mit.', knopf)) return;
+  const r = await fetch('/api/bestand-entfernen', {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify({key: tr.dataset.key})});
+  const j = await r.json();
+  if (j.error){ meldenNeben(knopf, j.error, true); return; }
+  location.reload();
+}
 async function verbindlichkeitStreichen(kennung, name){
   if (!confirm(name + ' aus dem Vermögen streichen? Die Notiz geht mit.')) return;
   const box = document.getElementById('vm-streichen');
@@ -398,7 +447,7 @@ async function verbindlichkeitStreichen(kennung, name){
 {# data-sortable und data-resizable gesetzt: _resize.html laesst die Tabelle aus, ein
    sortiertes Ziel liesse sein Panel zurueck. #}
 <div class="wrap"><table class="wirkung" data-sortable="1" data-resizable="1">
-  <tr><th>Ziel</th><th class="num bestand">Bestand</th>
+  <tr><th>Ziel</th><th class="num bestand">Stand</th>
     <th class="num">{{ w.tempo.schnitt }}</th><th class="num">{{ w.tempo.juengst }}</th></tr>
   {% for z in w.zeilen %}
   {% set id = z.schnitt.ziel.goal_id %}
@@ -407,7 +456,7 @@ async function verbindlichkeitStreichen(kennung, name){
     <td class="ziel">{% if klappt %}<span class="pfeil" id="wa-{{ id|e }}">▸</span> {% endif %}{{ z.schnitt.ziel.name }}
       <div class="muted fein">{{ ('Stichdatum ' ~ z.schnitt.ziel.due) if z.schnitt.ziel.due else 'ohne Stichdatum' }}</div></td>
     <td class="num bestand"><strong class="{{ z.schnitt.balken_aenderung|vz or 'muted' }}"
-        title="Bestand heute gegen Bestand zum Stichtag davor">{{ z.schnitt.balken_aenderung|euro }}</strong></td>
+        title="Stand heute gegen Stand zum Stichtag davor">{{ z.schnitt.balken_aenderung|euro }}</strong></td>
     {{ tempozelle(z.schnitt) }}{{ tempozelle(z.juengst) }}
   </tr>
   {% if klappt %}
@@ -465,7 +514,7 @@ async function verbindlichkeitStreichen(kennung, name){
         {% else %}
         <tr><td colspan="4" class="muted">Keine Ursache bewegt dieses Ziel.</td></tr>
         {% endfor %}
-        <tr><td colspan="3" style="padding-top:.5rem" class="muted">Wert zum Stichdatum {{ zw.ziel.due }}:
+        <tr><td colspan="3" style="padding-top:.5rem" class="muted">Stand zum Stichdatum {{ zw.ziel.due }}:
             {{ zw.vorher|euro }} → {{ zw.heute|euro }}</td>
           <td class="num {{ zw.aenderung|vz or 'muted' }}" style="padding-top:.5rem"><strong>{{ zw.aenderung|euro }}</strong></td></tr>
       </table></div>
@@ -591,13 +640,13 @@ function wirkungZeigen(id){
 {% include "_klappzustand.html" %}
 {% import "_konfig.html" as kf %}
 {{ kf.fuss([
-  ('config/balances.yaml', 'Die Stände, deren Alter hier geprüft wird; auch was hier an Werten und Notizen geändert wurde, samt den abgelegten Ständen je Monat.'),
+  ('config/balances.yaml', 'Die Stände, deren Alter hier geprüft wird; auch was hier an Ständen und Notizen geändert wurde, samt den abgelegten Ständen je Monat.'),
   ('config/renten.yaml', 'Rentenquellen mit Art, Beginn, Betrag, Stand und Notiz, gepflegt auf /renten.'),
   ('config/accounts.yaml', 'Welche Konten einen Auszug liefern müssen.'),
-  ('config/backup.yaml', 'Wohin das Backup schreibt und wie viele Stände bleiben.'),
+  ('config/backup.yaml', 'Wohin die Sicherung schreibt und wie viele Stände bleiben.'),
   ('config/szenarien.yaml', 'Welche Pläne eingeschaltet sind.'),
-  ('config/goals.yaml', 'Das Ziel mit der Kennung barista-fire, wenn es eins gibt: seine Fortschrittszeile.'),
-  ('config/forecast.yaml', 'Die Kontenvorschau in der Ablaufzeile.'),
+  ('config/goals.yaml', 'Das Ziel, dessen Fortschritt der Monatsabschluss zeigt, wenn es eines gibt.'),
+  ('config/forecast.yaml', 'Die Kontoprognose in der Ablaufzeile.'),
   ('finctl/web/templates/monatsabschluss.html', 'Die Texte dieser Seite.'),
 ], handbuch='monatsabschluss') }}
 {% endblock %}

@@ -25,5 +25,6 @@ ziele:
   - giro
   - tagesgeld
   - depot
+  im_monatsabschluss: true
   notiz: Gemessen an Giro, Tagesgeld und Depot; die Policen zaehlen nicht mit. Stichtag
     mitten im Jahr, damit die Hochrechnung zwischen zwei Jahresenden liegt.

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Split #{{ tx.id }}{% endblock %}
+{% block title %}Teile von Buchung #{{ tx.id }}{% endblock %}
 {% block body %}
 {% include "_combo.html" %}
 <h1>Buchung aufteilen <span class="muted zusatz">— #{{ tx.id }}</span></h1>
@@ -25,7 +25,7 @@
 <p style="margin-top:.8rem;display:flex;gap:.5rem;align-items:center">
   <button class="ghost" onclick="addRow()">+ Teil</button>
   <button class="ghost" onclick="splitEven()">gleichmäßig verteilen</button>
-  <button onclick="save()">Aufteilung speichern</button>
+  <button onclick="save()">Teile speichern</button>
   <span id="status" class="muted"></span>
 </p>
 
@@ -129,7 +129,7 @@ recalc();
 </script>
 {% import "_konfig.html" as kf %}
 {{ kf.fuss([
-  ('config/overrides.yaml', 'Der Split wird hier gesichert und überlebt jeden Neuaufbau.'),
+  ('config/overrides.yaml', 'Die Teile werden hier gesichert und überleben jeden Neuaufbau.'),
   ('config/taxonomy.yaml', 'Die Kategorien zur Auswahl.'),
   ('finctl/web/templates/split.html', 'Die Texte dieser Seite.'),
 ], handbuch='split') }}

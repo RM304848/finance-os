@@ -33,6 +33,28 @@ und ist nur auf deinem eigenen Rechner erreichbar (`127.0.0.1`), deshalb fragt
 auch die Firewall nicht. Sperrt ein Firmenrechner unbekannte Programme ganz, ist
 das eine Regel der IT. Dann lässt sie sich dort nicht starten.
 
+### Wenn Windows die App nicht startet
+
+Die App ist nicht bei Microsoft signiert. Windows kennt sie deshalb nicht und
+fragt nach. Je nach Meldung:
+
+- **„Der Computer wurde durch Windows geschützt“, aber ohne „Trotzdem ausführen“:**
+  Eine Richtlinie verbietet unbekannte Programme, meist auf Firmenrechnern. Dann
+  geht es nur mit der IT.
+- **Der Browser behält die Datei nicht** (Edge: „wird nicht häufig
+  heruntergeladen“): Bei der Meldung auf **…** und dann auf **Behalten** klicken.
+- **Kam die Datei in einer ZIP:** Erst entpacken. Startet sie dann nicht, die
+  `.exe` mit der rechten Maustaste anklicken, **Eigenschaften**, unten **Zulassen**
+  anhaken, **OK**.
+- **„Intelligente App-Steuerung hat … blockiert“** (Windows 11): Diese Sperre
+  lässt keine Ausnahme für einzelne Programme zu. Abschalten lässt sie sich, aber
+  nicht wieder einschalten, ohne Windows neu aufzusetzen. Das entscheidest du selbst.
+  Sag sonst der Person Bescheid, von der du die App hast.
+- **Der Virenschutz meldet eine Bedrohung oder die Datei ist verschwunden:**
+  Programme, die wie diese aus Python gebaut sind, hält der Virenschutz manchmal
+  fälschlich für gefährlich. Gib der Person Bescheid, von der du die App hast,
+  statt den Schutz abzuschalten.
+
 ## Benutzen
 
 Nach dem Start öffnet sich der Browser mit der App. Beim ersten Mal – und

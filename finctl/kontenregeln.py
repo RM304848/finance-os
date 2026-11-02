@@ -34,7 +34,7 @@ FELDER: dict[str, str] = {
     "ceiling_cents": "cents",
     "sweep_to": "text",
     "auffuellen": "schalter",
-    "floor_from_loan": "schalter",
+    "floor_from_loan": "kredit",
 }
 
 
@@ -45,7 +45,7 @@ NOTIZ_ZEILE = ("note",)
 #: Was gilt, wenn die Datei zu einem Schalter nichts sagt. Ohne diese Standards
 #: schriebe jedes Speichern ein "auffuellen: true" in die Datei, obwohl sich nichts
 #: geaendert hat.
-STANDARD: dict[str, object] = {"auffuellen": True, "floor_from_loan": False}
+STANDARD: dict[str, object] = {"auffuellen": True}
 
 
 def _spec() -> dict:
@@ -79,14 +79,11 @@ def _text_gleich(wert, bisher) -> bool:
 def _feld_setzen(eintrag: dict, feld: str, wert) -> None:
     """Ein Feld der Regel setzen. Was schon so gilt, aendert die Datei nicht."""
     art = FELDER[feld]
-    if wert is None:
+    if art == "kredit":
+        _kredit_setzen(eintrag, feld, wert)
+    elif wert is None:
         eintrag.pop(feld, None)
     elif art == "schalter":
-        # `floor_from_loan` traegt die Kennung des Kredits, nicht nur ein Ja: Ein Haken, der
-        # schon gilt, laesst sie stehen. Sonst machte Speichern ohne Aenderung aus "001" ein
-        # "true", und die Rate des Kredits hiesse "True".
-        if wert and eintrag.get(feld):
-            return
         # Der Standard steht nicht in der Datei, solange der Haushalt ihn nicht aendert.
         if feld in eintrag or bool(wert) != STANDARD.get(feld):
             eintrag[feld] = bool(wert)
@@ -95,6 +92,22 @@ def _feld_setzen(eintrag: dict, feld: str, wert) -> None:
             eintrag[feld] = str(wert).strip()
     else:
         eintrag[feld] = wert
+
+
+def _kredit_setzen(eintrag: dict, feld: str, wert) -> None:
+    """`floor_from_loan`: die Kennung eines Kredits. Kein Kredit nimmt das Feld heraus.
+
+    Ein `true` oder `false`, wie fruehere Fassungen es schrieben, bewirkt nichts; die Karte
+    zeigt „kein Kredit gewaehlt“ und laesst es stehen, solange niemand einen Kredit waehlt.
+    Ein alter Aufruf mit `True` aendert nichts: Eine Kennung bliebe, ein Haken ohne Kredit
+    wird nicht mehr geschrieben.
+    """
+    bisher = eintrag.get(feld)
+    if isinstance(wert, str) and wert.strip():
+        if bisher != wert.strip():
+            eintrag[feld] = wert.strip()
+    elif bisher is not None and not isinstance(bisher, bool) and wert is not True:
+        del eintrag[feld]
 
 
 def setzen(konto: str, felder: dict) -> dict:

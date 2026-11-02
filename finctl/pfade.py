@@ -130,6 +130,14 @@ DATA_DIR = DATEN / "data"
 STATEMENTS_DIR = DATA_DIR / "statements"
 DB_PATH = DATA_DIR / "finance.db"
 
+#: Vorschlaege einer KI (ADR 0002): eine Datei je Vorschlag, noch keine Entscheidung.
+VORSCHLAEGE_DIR = DATA_DIR / "vorschlaege"
+
+#: Der Schluessel einer Schnittstelle fuer ein Modell (ADR 0002, `web/anbindung.py`).
+#: Bewusst NICHT in `config/`: `config/` wird gesichert, kopiert und mit
+#: Menschen geteilt, ein Schluessel nicht. Eine Datei, nur fuer den Nutzer lesbar.
+SCHLUESSEL_PATH = DATEN / "anbindung.schluessel"
+
 
 def aus_umgebung(programm: str) -> str:
     """Wie ein Programm der virtuellen Umgebung aufgerufen wird.

@@ -1,0 +1,138 @@
+{% extends "base.html" %}{% block n_annahmen %}on{% endblock %}
+{% block title %}Fortschreibung{% endblock %}
+{% block body %}
+<h1>Fortschreibung</h1>
+<p class="zweck">Woraus Monatsmodell und Jahresrechnung fortschreiben: je Block die Quelle, der Betrag und die Seite, auf der sie sich ändern lässt.</p>
+
+{% if not seite.zeilen %}
+<p class="muted">Noch keine vollständigen Monate im Hauptbuch.</p>
+{% else %}
+<div class="wrap"><table>
+  <tr><th>Block</th><th>Quelle</th>
+    <th class="num">Monatsmodell {{ seite.monat.strftime('%Y-%m') if seite.monat else '' }}</th>
+    <th class="num">Jahresrechnung {{ seite.jahr }}</th><th>Ändern auf</th></tr>
+  {% for z in seite.zeilen %}
+  <tr>
+    <td>{{ z.name }}</td>
+    <td>
+      {%- if z.gleiche_quelle %}{{ z.quelle_monat }}
+      {%- else %}
+      <div><span class="muted klein">Monatsmodell</span> {{ z.quelle_monat or '—' }}</div>
+      <div><span class="muted klein">Jahresrechnung</span> {{ z.quelle_jahr or '—' }}</div>
+      {%- endif %}</td>
+    <td class="num {{ 'muted' if z.monat_cents is none else z.monat_cents|vz }}">{{ z.monat_cents|euro if z.monat_cents is not none else '—' }}</td>
+    <td class="num {{ 'muted' if z.jahr_cents is none else z.jahr_cents|vz }}">{{ z.jahr_cents|euro if z.jahr_cents is not none else '—' }}</td>
+    <td><a class="plain" href="{{ z.href }}">{{ z.ort }}</a></td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+{% if doppelt %}
+<div class="note">Ein Vertrag ohne zugeordnete Buchung zählt neben der Messung seiner Kategorie doppelt:
+  {% for k in doppelt %}<code>{{ k }}</code>{{ ', ' if not loop.last }}{% endfor %}. Eine Buchung zuordnen genügt.</div>
+{% endif %}
+
+{# Die Abwahl ist die Handentscheidung, die beide Rechnungen lesen. Zu, weil die Tabelle
+   lang ist; ein Link auf #nicht-fortschreiben klappt sie auf. #}
+{% if v.fenster %}
+<details class="klapp" id="nicht-fortschreiben">
+  <summary>Nicht fortschreiben
+    <span class="zahl">— Monatsmodell <span class="{{ v.summe_konten|vz }}">{{ v.summe_konten|euro }}</span> · Jahresrechnung
+      <span class="{{ v.summe_jahr|vz }}">{{ v.summe_jahr|euro }}</span> je Monat</span></summary>
+<p class="muted klein" style="margin:.4rem 0 .6rem">
+  Gemessen {{ fenster_text }}, je Monat und ohne Umbuchungen.</p>
+
+<div class="card" style="margin:.4rem 0 .8rem;display:flex;gap:2rem;flex-wrap:wrap;align-items:end">
+  <div><div class="muted klein">fortgeschrieben je Monat, Monatsmodell</div>
+    <div class="v {{ v.summe_konten|vz }}" id="summe-konten" data-vorher="{{ v.summe_konten }}">{{ v.summe_konten|euro }}</div></div>
+  <div><div class="muted klein">fortgeschrieben je Monat, Jahresrechnung</div>
+    <div class="v {{ v.summe_jahr|vz }}" id="summe-jahr" data-vorher="{{ v.summe_jahr }}">{{ v.summe_jahr|euro }}</div></div>
+  <div style="flex:1;min-width:14rem">
+    <div class="muted klein" id="vorschau-text">Häkchen ändern zeigt hier
+      vorher und nachher, gespeichert wird erst mit dem Knopf.</div>
+    <button id="basis-speichern" onclick="basisSpeichern()" disabled>Speichern</button>
+    <span id="basis-meldung" class="muted klein"></span></div>
+</div>
+
+<div class="wrap"><table>
+  <tr><th>Kategorie</th><th>Block</th>
+    {% for m in v.monate %}<th class="num fein">{{ m[:7] }}</th>{% endfor %}
+    <th class="num">Schnitt</th><th class="num">Monatsmodell</th><th class="num">Jahresrechnung</th>
+    <th>fortschreiben</th></tr>
+  {% for z in v.zeilen %}
+  <tr{% if z.abgewaehlt %} class="done"{% endif %}>
+    <td style="min-width:17rem"><code>{{ z.kategorie or '—' }}</code>
+      {%- if z.unregelmaessig %} <span class="pill eigen">unregelmäßig</span>{% endif %}</td>
+    <td class="muted klein">{{ z.block or '—' }}</td>
+    {% for w in z.werte %}
+    <td class="num {{ w|vz or 'muted' }} fein">
+      {{ (w / 100)|round|int if w else '·' }}</td>
+    {% endfor %}
+    <td class="num {{ z.schnitt|vz }}">{{ z.schnitt|euro }}</td>
+    <td class="num {{ 'muted' if z.konten is none else z.konten|vz }}">{{ z.konten|euro if z.konten is not none else '—' }}</td>
+    <td class="num {{ 'muted' if z.jahr is none else z.jahr|vz }}">{{ z.jahr|euro if z.jahr is not none else '—' }}</td>
+    <td>{% if z.abwaehlbar %}<input type="checkbox" class="fort"
+        data-kategorie="{{ z.kategorie }}" data-war="{{ 0 if z.abgewaehlt else 1 }}"
+        data-konten="{{ z.konten_roh or 0 }}" data-jahr="{{ z.jahr_roh or 0 }}"
+        {% if not z.abgewaehlt %}checked{% endif %} onchange="basisVorschau()">{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+</details>
+{% endif %}
+{% endif %}
+
+<script>
+function basisGeaendert(){
+  return Array.from(document.querySelectorAll('input.fort'))
+    .filter(k => (k.checked ? '1' : '0') !== k.dataset.war);
+}
+function basisVorschau(){
+  const liste = basisGeaendert();
+  let dk = 0, dj = 0;
+  liste.forEach(k => {
+    const vz = k.checked ? 1 : -1;
+    dk += vz * parseInt(k.dataset.konten, 10);
+    dj += vz * parseInt(k.dataset.jahr, 10);
+  });
+  const sk = document.getElementById('summe-konten'), sj = document.getElementById('summe-jahr');
+  const fmt = c => centsAlsText(c) + ' €';
+  sk.textContent = liste.length ? fmt(+sk.dataset.vorher) + ' → ' + fmt(+sk.dataset.vorher + dk) : fmt(+sk.dataset.vorher);
+  sj.textContent = liste.length ? fmt(+sj.dataset.vorher) + ' → ' + fmt(+sj.dataset.vorher + dj) : fmt(+sj.dataset.vorher);
+  document.getElementById('vorschau-text').textContent = liste.length
+    ? liste.length + ' geändert: ' + liste.map(k => k.dataset.kategorie).join(', ')
+    : 'Häkchen ändern zeigt hier vorher und nachher, gespeichert wird erst mit dem Knopf.';
+  document.getElementById('basis-speichern').disabled = !liste.length;
+}
+async function basisSpeichern(){
+  const box = document.getElementById('basis-meldung');
+  for (const k of basisGeaendert()){
+    const r = await fetch('/api/prognosebasis', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({kategorie: k.dataset.kategorie, fortschreiben: k.checked})});
+    const j = await r.json();
+    if (j.error){ box.textContent = 'Fehler: ' + j.error; box.className = 'neg'; return; }
+  }
+  box.textContent = 'gespeichert — neu rechnen …'; box.className = 'pos';
+  setTimeout(() => location.reload(), 600);
+}
+// Nach dem Klappzustand, sonst schliesst der gemerkte Zustand wieder, was
+// der Link oeffnen wollte.
+window.addEventListener('load', () => {
+  if (location.hash === '#nicht-fortschreiben') {
+    const d = document.getElementById('nicht-fortschreiben');
+    d.open = true; d.scrollIntoView();
+  }
+});
+</script>
+{% include "_klappzustand.html" %}
+
+{% import "_konfig.html" as kf %}
+{{ kf.fuss([
+  ('config/prognosebasis_custom.yaml', 'Was unter Nicht fortschreiben abgewählt ist — gilt für beide Rechnungen.'),
+  ('config/assumptions.yaml', 'Gehalts-Untergrenze und Steigerung.'),
+  ('config/abos.yaml', 'Verträge mit Termin ersetzen ihre Buchungen in der Messung.'),
+  ('config/forecast.yaml', 'Kontenregeln und Ausschlüsse der Kontoprognose.'),
+  ('finctl/web/templates/prognosebasis.html', 'Die Texte dieser Seite.'),
+], handbuch='prognosebasis') }}
+{% endblock %}

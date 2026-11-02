@@ -13,11 +13,14 @@ WAS GESCHIEHT, in dieser Reihenfolge:
    ebenfalls im Speicher und geprueft.
 3. `config/` wird nach `archiv/vor_umstellung_<Datum>/` gesichert.
 4. Die umgewandelten Dateien werden geschrieben, die Seitendateien der Paare entfernt.
-5. Der Bericht kommt nach `notizen/umstellung_<Datum>.md`: jeder Kommentar und wo er jetzt
+5. Hat der Lauf eine Seitendatei mit einer Datenbank verglichen, wird die Tabelle `settings`
+   aus der Datenbank entfernt (`umstellen_tabelle`).
+6. Der Bericht kommt nach `notizen/umstellung_<Datum>.md`: jeder Kommentar und wo er jetzt
    steht, dazu was weggefallen ist und was beim Zusammenlegen geschah.
 
-`--probe <Ordner>` macht nur 1, 2 und 5 und legt die umgewandelte Kopie in den Ordner. Der
-Datenordner bleibt unberuehrt.
+`--probe <Ordner>` macht nur 1, 2 und 6 und legt die umgewandelte Kopie in den Ordner, aber
+nur, wenn es etwas umzustellen gibt und jede Pruefung besteht. Der Datenordner bleibt
+unberuehrt.
 
 EINE ERKENNUNG. `Plan.zu_tun` sagt, ob es etwas zu tun gibt: Kommentare, alte Namen oder die
 Seitendatei eines Paars. Nach ihr meldet der Befehl „Nichts umzustellen“, und nach ihr haelt
@@ -53,6 +56,7 @@ import yaml
 
 from finctl import dateien as _dateien
 from finctl import umstellen_paare as _paare
+from finctl import umstellen_tabelle as _tabelle
 from finctl.notizen import BEREICH, BEREICHE, NOTIZ, VOM
 from finctl.umstellen_form import OHNE_SEITE, Behaelter, Datei, datei
 from finctl.umstellen_lagen import (
@@ -321,10 +325,10 @@ def _pruefen(name: str, text: str, neu: str, daten: dict, neu_daten: Any,
     vorher = lesen(text)
     gezaehlt = sum(s.zeilen for s in stuecke)
     if gezaehlt != len(vorher):
-        fehler.append(f"{name}: {len(vorher)} Kommentarzeilen, aber {gezaehlt} in Stuecken")
+        fehler.append(f"{name}: {len(vorher)} Kommentarzeilen, aber {gezaehlt} in Stücken")
     belegt = [z for s in stuecke for z in range(s.von, s.bis + 1)]
     if sorted(belegt) != sorted(k.zeile for k in vorher):
-        fehler.append(f"{name}: nicht jede Kommentarzeile steht in genau einem Stueck")
+        fehler.append(f"{name}: nicht jede Kommentarzeile steht in genau einem Stück")
     if lesen(neu):
         fehler.append(f"{name}: die neue Datei hat noch Kommentare")
     if ohne_notizen(daten, datei_) != ohne_notizen(neu_daten, datei_):
@@ -452,6 +456,12 @@ class Plan:
     config: Path
     umwandlungen: list[Umwandlung] = field(default_factory=list)
     unberuehrt: list[str] = field(default_factory=list)
+    #: Die Tabelle `settings` der Datenbank (`umstellen_tabelle`): ob der Abgleich lief, was die
+    #: Datei neuer gemacht hat, was bewusst verworfen wird und ob die Tabelle entfernt ist.
+    tabelle_geprueft: bool = False
+    tabelle_hinweise: list[str] = field(default_factory=list)
+    tabelle_verworfen: list[str] = field(default_factory=list)
+    tabelle_entfernt: bool = False
 
     @property
     def zu_tun(self) -> list[Umwandlung]:
@@ -541,62 +551,12 @@ def _zusammenlegen(plan: Plan) -> None:
             basis.neu = gelegt.neu
 
 
-def tabelle_gegen_datei(config: Path, text: str) -> list[str]:
-    """Steht in der Tabelle `settings` etwas, das `settings_custom.yaml` nicht sagt?
+def planen(config: Path, *, tabelle_verwerfen: bool = False) -> Plan:
+    """Jede Datei in `config/` umwandeln, im Speicher; dann die Paare zusammenlegen.
 
-    Bis N.3f las `_floor_for` die Untergrenze aus der Tabelle, und `/api/setting` legte eine
-    Notiz nur dort ab. Beides ginge beim Zusammenlegen verloren, das nur die Datei sieht. Der
-    Lauf haelt deshalb an, wenn die Tabelle eine Zeile hat, die die Datei nicht hat, einen
-    anderen Wert oder eine Notiz. Eine Zeile nur in der Datei ist kein Fund: `init` hat sie
-    nur noch nicht gespiegelt. Ohne `finance.db` (oder ohne die Tabelle) gibt es nichts zu
-    vergleichen.
+    Mit `tabelle_verwerfen` halten Funde im Abgleich der Tabelle `settings` den Lauf nicht an:
+    Sie kommen in den Bericht und werden mit der Tabelle verworfen.
     """
-    import sqlite3
-    import tempfile
-
-    db = config.parent / "data" / "finance.db"
-    if not db.exists():
-        return []
-    # Eine Kopie lesen: Eine Datenbank im WAL-Betrieb legt beim Lesen `-shm` und `-wal` neben
-    # sich an, und der Datenordner soll unberuehrt bleiben (auch bei `--probe`).
-    with tempfile.TemporaryDirectory(prefix="finctl-settings-") as tmp:
-        for suffix in ("", "-wal"):
-            quelle = db.with_name(db.name + suffix)
-            if quelle.exists():
-                shutil.copyfile(quelle, Path(tmp) / quelle.name)
-        try:
-            c = sqlite3.connect(Path(tmp) / db.name)
-            try:
-                zeilen = c.execute("SELECT key, value, note FROM settings").fetchall()
-            finally:
-                c.close()
-        except sqlite3.Error:
-            return []
-    gelesen = yaml.safe_load(text)
-    datei = gelesen.get("einstellungen") if isinstance(gelesen, dict) else None
-    datei = {str(k): v for k, v in _notizen_ohne(datei).items()}
-    fehler = []
-    for key, wert, notiz in sorted(zeilen):
-        if key not in datei:
-            fehler.append(f"Tabelle settings, Zeile `{key}` = {wert}: steht nicht in "
-                          "settings_custom.yaml")
-        elif str(datei[key]) != str(wert):
-            fehler.append(f"Tabelle settings, Zeile `{key}`: {wert}, in settings_custom.yaml "
-                          f"{datei[key]}")
-        if notiz:
-            fehler.append(f"Tabelle settings, Zeile `{key}` traegt eine Notiz, die in keiner "
-                          f"Datei steht: {notiz}")
-    return fehler
-
-
-def _notizen_ohne(zuordnung: Any) -> dict:
-    from finctl.notizen import ohne
-
-    return ohne(zuordnung if isinstance(zuordnung, dict) else {})
-
-
-def planen(config: Path) -> Plan:
-    """Jede Datei in `config/` umwandeln, im Speicher; dann die Paare zusammenlegen."""
     plan = Plan(config)
     for pfad in sorted(config.glob("*.y*ml")):
         if pfad.suffix not in (".yaml", ".yml"):
@@ -608,8 +568,14 @@ def planen(config: Path) -> Plan:
     _zusammenlegen(plan)
     seite = next((u for u in plan.umwandlungen if u.name == "settings_custom.yaml"), None)
     if seite is not None and not seite.fehler:
-        seite.fehler += tabelle_gegen_datei(
+        abgleich = _tabelle.abgleichen(
             config, seite.seitentext if seite.seitentext is not None else seite.text)
+        plan.tabelle_geprueft = abgleich.geprueft
+        plan.tabelle_hinweise = abgleich.hinweise
+        if tabelle_verwerfen:
+            plan.tabelle_verworfen = abgleich.fehler
+        else:
+            seite.fehler += abgleich.fehler
     return plan
 
 
@@ -633,8 +599,8 @@ def halt_wenn_offen(config: Path | None = None) -> None:
     raise AlteFormError(
         f"Der Datenordner {config.parent} ist noch nicht umgestellt: "
         f"{'; '.join(plan.beschreibung())}.\n"
-        "Die App liest diese Form nicht mehr und aendert nichts, bis es soweit ist.\n"
-        f"  Ansehen:   {befehl} umstellen --probe <ordner ausserhalb>\n"
+        "Die App liest diese Form nicht mehr und ändert nichts, bis es soweit ist.\n"
+        f"  Ansehen:   {befehl} umstellen --probe <Ordner außerhalb>\n"
         f"  Umstellen: {befehl} umstellen")
 
 
@@ -657,15 +623,17 @@ def _schreiben(pfad: Path, text: str) -> None:
     neu.replace(pfad)
 
 
-def ausfuehren(wurzel: Path, *, heute: date | None = None) -> tuple[Plan, Path | None, Path | None]:
+def ausfuehren(wurzel: Path, *, heute: date | None = None,
+               tabelle_verwerfen: bool = False) -> tuple[Plan, Path | None, Path | None]:
     """Den Datenordner umstellen. Gibt Plan, Sicherung und Bericht zurueck.
 
     Mit Fehlern in einer Pruefung geschieht nichts: Der Plan kommt zurueck, alles andere ist
-    `None`. Ohne etwas zu tun ebenso.
+    `None`. Ohne etwas zu tun ebenso. Hat der Abgleich der Tabelle `settings` gelaufen, ist
+    sie danach aus der Datenbank entfernt.
     """
     heute = heute or date.today()
     config = wurzel / "config"
-    plan = planen(config)
+    plan = planen(config, tabelle_verwerfen=tabelle_verwerfen)
     if plan.fehler or not plan.zu_tun:
         return plan, None, None
     sicherung = _nummeriert(wurzel / ARCHIV_ORDNER / f"vor_umstellung_{heute.isoformat()}")
@@ -677,26 +645,31 @@ def ausfuehren(wurzel: Path, *, heute: date | None = None) -> tuple[Plan, Path |
         else:
             _schreiben(config / u.name, u.neu)
         _dateien.vergessen(config / u.name)
+    if plan.tabelle_geprueft:
+        plan.tabelle_entfernt = _tabelle.entfernen(wurzel / "data" / "finance.db")
     bericht = _bericht_schreiben(plan, wurzel / NOTIZEN_ORDNER, heute, sicherung)
     return plan, sicherung, bericht
 
 
-def probieren(wurzel: Path, ziel: Path, *, heute: date | None = None) -> tuple[Plan, Path | None]:
+def probieren(wurzel: Path, ziel: Path, *, heute: date | None = None,
+              tabelle_verwerfen: bool = False) -> tuple[Plan, Path | None]:
     """Nur ansehen: die umgewandelte Kopie und der Bericht kommen nach `ziel`.
 
-    `ziel` darf nicht im Datenordner liegen. Der Datenordner wird nicht geschrieben.
+    `ziel` darf nicht im Datenordner liegen. Der Datenordner wird nicht geschrieben. Geschrieben
+    wird nur, wenn es etwas umzustellen gibt und keine Pruefung scheitert; sonst bleibt `ziel`,
+    wie es war, und der Bericht ist `None`.
     """
     heute = heute or date.today()
     if wurzel.resolve() in (ziel.resolve(), *ziel.resolve().parents):
-        raise ValueError("Der Probeordner muss ausserhalb des Datenordners liegen.")
-    plan = planen(wurzel / "config")
+        raise ValueError("Der Probeordner muss außerhalb des Datenordners liegen.")
+    plan = planen(wurzel / "config", tabelle_verwerfen=tabelle_verwerfen)
+    if plan.fehler or not plan.zu_tun:
+        return plan, None
     ziel.mkdir(parents=True, exist_ok=True)
     kopie = ziel / "config"
     if kopie.exists():
         shutil.rmtree(kopie)
     _kopieren(wurzel / "config", kopie)
-    if plan.fehler:
-        return plan, None
     for u in plan.zu_schreiben:
         if u.loeschen:
             (kopie / u.name).unlink()
@@ -724,7 +697,9 @@ def zusammenfassung(plan: Plan, sicherung: Path | None, bericht: Path | None,
             "fehler": plan.fehler, "probe": str(probe) if probe else None,
             "sicherung": str(sicherung) if sicherung else None,
             "bericht": str(bericht) if bericht else None,
-            "unberuehrt": plan.unberuehrt}
+            "unberuehrt": plan.unberuehrt,
+            "tabelle": {"geprueft": plan.tabelle_geprueft, "entfernt": plan.tabelle_entfernt,
+                        "hinweise": plan.tabelle_hinweise, "verworfen": plan.tabelle_verworfen}}
 
 
 # ------------------------------------------------------------- Bericht
@@ -754,9 +729,10 @@ def bericht_text(plan: Plan, heute: date, sicherung: Path | None) -> str:
     paare = plan.zusammenlegungen
     z += [f"- umgewandelt: {len(zu_tun)} Dateien",
           f"- zusammengelegt: {len(paare)} Paare, die Seitendatei ist entfernt",
-          f"- unveraendert: {len(plan.umwandlungen) - len(plan.zu_schreiben)} Dateien",
+          f"- unverändert: {len(plan.umwandlungen) - len(plan.zu_schreiben)} Dateien",
           f"- ohne Seite, nicht angefasst: {', '.join(plan.unberuehrt) or '–'}", ""]
     z += _paare_text(paare)
+    z += _tabelle_text(plan, sicherung)
     z += ["## Kommentarzeilen je Datei und Lage", "",
           "| Datei | Zeilen | " + " | ".join(LAGEN) + " | in Notizen | weggefallen | umbenannt |",
           "|---|---:|" + "---:|" * len(LAGEN) + "---:|---:|---|"]
@@ -797,18 +773,33 @@ def _paare_text(paare: list[Zusammenlegung]) -> list[str]:
     z: list[str] = []
     for p in paare:
         z += [f"## Zusammengelegt: `{p.seite}` in `{p.basis}`", ""]
-        z.append(f"- Basiswerte, die die Seite ueberschrieben hatte und die jetzt in einer "
+        z.append(f"- Basiswerte, die die Seite überschrieben hatte und die jetzt in einer "
                  f"Notiz stehen: {len(p.ueberschrieben)}")
         z += [f"  - `{ort}`: {wert}" for ort, wert in p.ueberschrieben]
         z += _liste("Notizen, die zusammentrafen (Basis zuerst)", p.notizen)
         z += _liste("Budgets aus der Seite", p.budgets)
         z += _liste("Was die Seite brachte", p.aus_seite)
-        z += _liste("Felder der Seite, die kein Leser je las (nicht uebernommen, in der "
+        z += _liste("Felder der Seite, die kein Leser je las (nicht übernommen, in der "
                     "Sicherung)", p.ungelesen)
         z += _liste("Ausgeblendet gewesen, jetzt nicht mehr in der Datei (nur in der Sicherung; "
                     "die Notiz steht beim Bereich)", p.ausgeblendet)
         z.append("")
     return z
+
+
+def _tabelle_text(plan: Plan, sicherung: Path | None) -> list[str]:
+    """Was mit der Tabelle `settings` der Datenbank geschah (oder bei der Probe geschaehe)."""
+    if not plan.tabelle_geprueft:
+        return []
+    if plan.tabelle_entfernt:
+        stand = "Die Tabelle ist aus der Datenbank entfernt."
+    elif sicherung is None:
+        stand = "Die Tabelle würde beim Umstellen aus der Datenbank entfernt."
+    else:
+        stand = "Die Tabelle ließ sich nicht entfernen; niemand liest sie."
+    return ["## Tabelle `settings` der Datenbank", "", f"- {stand}",
+            *[f"- Datei gilt: {h}" for h in plan.tabelle_hinweise],
+            *[f"- Verworfen (auf Wunsch): {v}" for v in plan.tabelle_verworfen], ""]
 
 
 def _weggefallen_text(zu_tun: list[Umwandlung]) -> list[str]:

@@ -9,7 +9,9 @@ verstreut.
 
 from __future__ import annotations
 
+import ast
 import functools
+import os
 import re
 from pathlib import Path
 
@@ -63,7 +65,8 @@ def test_every_check_has_an_implementation():
     bekannt = {"vorlagen_verbieten", "punktdezimalen", "reihenfolge", "datei_enthaelt",
                "ueberschriften", "kein_cdn", "fliesstext", "konfig_fuss", "navigation",
                "zwecktext", "textdubletten", "kommentare", "seitenrhythmus",
-               "kontrast", "themengleich", "nur_in"}
+               "kontrast", "themengleich", "nur_in", "skript_ohne_html",
+               "einzelfaelle"}
     for r in REGELN:
         art = (r.get("pruefung") or {}).get("art")
         assert art is None or art in bekannt, f"{r['id']}: unbekannte Pruefung {art}"
@@ -100,6 +103,59 @@ def test_an_exception_that_is_fixed_is_removed_from_the_list(regel):
         text = _ohne_kommentare((VORLAGEN / name).read_text(encoding="utf-8"))
         assert any(re.search(m, text) for m in p["muster"]), (
             f"{regel['id']}: {name} ist behoben -- aus `ausnahmen` und `offen` streichen")
+
+
+# Ein Tag, der in einem Skript als Text steht, und eine Zeile, die im Skript
+# mit createElement entsteht: beides ist HTML, das ein Skript zusammensetzt.
+_TAG_IM_TEXT = re.compile(
+    r"<(?:tr|td|th|div|span|table|tbody|thead|ul|li|p|a|button|input|select|option|label"
+    r"|form|details|summary|textarea|strong|em|b|code|h[1-6]|small|pre)(?=[\s>/])")
+_ZEILE_AUS_SKRIPT = re.compile(r"createElement\(\s*['\"](?:tr|td|th|tbody)['\"]")
+_SKRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S)
+
+
+def _skript_html_zeilen(text: str) -> int:
+    """In wie vielen Skriptzeilen setzt eine Vorlage HTML zusammen?"""
+    zeilen = 0
+    for skript in _SKRIPT.findall(_ohne_kommentare(text)):
+        skript = re.sub(r"/\*.*?\*/", " ", skript, flags=re.S)
+        skript = re.sub(r"(?m)(?<![:'\"\\])//.*$", "", skript)
+        zeilen += sum(1 for z in skript.splitlines()
+                      if _TAG_IM_TEXT.search(z) or _ZEILE_AUS_SKRIPT.search(z))
+    return zeilen
+
+
+def _skript_html_funde() -> dict[str, int]:
+    funde = {v.name: _skript_html_zeilen(v.read_text(encoding="utf-8"))
+             for v in sorted(VORLAGEN.glob("*.html"))}
+    return {name: n for name, n in funde.items() if n}
+
+
+@pytest.mark.parametrize("regel", _mit("skript_ohne_html"), ids=_ids)
+def test_scripts_insert_pieces_from_the_server_and_build_no_html(regel):
+    """Die Ratsche: neue Stellen gibt es nicht, und bekannte werden nicht mehr.
+
+    `ausnahmen` fuehrt je Vorlage die Zahl der Skriptzeilen, die heute noch
+    HTML zusammensetzen -- wie ZU_VERZWEIGT in test_lint.py.
+    """
+    erlaubt = regel["pruefung"]["ausnahmen"]
+    funde = _skript_html_funde()
+    neu = {f"{name}: {n}" for name, n in funde.items() if n > erlaubt.get(name, 0)}
+    assert not neu, (
+        f"{regel['id']}: Diese Skripte setzen HTML zusammen. Das Stueck gehoert in eine "
+        f"Teilvorlage, die Schnittstelle liefert es als `html`:\n  " + "\n  ".join(sorted(neu)))
+
+
+@pytest.mark.parametrize("regel", _mit("skript_ohne_html"), ids=_ids)
+def test_a_script_that_builds_less_html_lowers_its_number(regel):
+    """Sonst bleibt eine behobene Altlast als Erlaubnis stehen."""
+    funde = _skript_html_funde()
+    veraltet = [f"{name}: {n} -> {funde.get(name, 0)}"
+                for name, n in regel["pruefung"]["ausnahmen"].items()
+                if funde.get(name, 0) < n]
+    assert not veraltet, (
+        f"{regel['id']}: in `ausnahmen` (und `offen`) senken oder streichen:\n  "
+        + "\n  ".join(veraltet))
 
 
 @pytest.mark.parametrize("regel", _mit("nur_in"), ids=_ids)
@@ -282,6 +338,120 @@ def test_no_template_states_a_number_that_will_age(pfad):
         + "\n\nDrei Reparaturen: die Zahl live rendern, wenn sie der Punkt ist; "
           "streichen, wenn sie nur Illustration war; datieren, wenn sie ein Fund war.")
 
+
+
+# ------------------------------------------------- Einzelfaelle im festen Text
+#
+# Fester Text nennt nichts, was nur ein Haushalt hat. Die Namen kommen zur
+# Laufzeit aus `config/`, nach dem Muster von `_rolle` in test_web.py: eine
+# Liste im Repository bestuende aus genau den Namen, die sie verbietet.
+
+#: Wo in `config/` die Kennungen und Namen stehen: Datei, Schluessel der Liste,
+#: Felder. Alles, was ein Haushalt selbst benennt.
+_NAMEN_IN_CONFIG = (
+    ("accounts", "accounts", ("id", "display_name", "institution")),
+    ("loans", "loans", ("name",)),
+    ("properties", "properties", ("id", "name")),
+    ("abos", "abos", ("id", "name")),
+    ("versicherungen", "versicherungen", ("id", "name")),
+    ("goals", "ziele", ("id", "name")),
+    ("renten", "renten", ("id", "name")),
+    ("groups", "gruppen", ("id", "name")),
+    ("szenarien", "szenarien", ("id", "name")),
+)
+_SQL = ("SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "CREATE", "PRAGMA")
+
+
+def _einzelfaelle_aus_config() -> set[str]:
+    """Kennungen und Namen des Haushalts, die kein Wort des Glossars sind."""
+    config = Path("config")
+
+    def lies(name: str) -> dict:
+        pfad = config / f"{name}.yaml"
+        return (yaml.safe_load(pfad.read_text(encoding="utf-8")) or {}) if pfad.exists() else {}
+
+    namen: set[str] = set()
+    for datei, schluessel, felder in _NAMEN_IN_CONFIG:
+        liste = lies(datei).get(schluessel) or []
+        for eintrag in liste if isinstance(liste, list) else []:
+            namen.update(str(eintrag.get(f) or "").strip() for f in felder)
+    geteilt = lies("geteilt_custom")
+    for projekt in geteilt.get("projekte") or []:
+        namen.update(str(projekt.get(f) or "").strip() for f in ("id", "name"))
+    for person in geteilt.get("personen") or []:
+        namen.add(str(person.get("name") if isinstance(person, dict) else person).strip())
+    glossar = Path("CONTEXT.md").read_text(encoding="utf-8").lower() \
+        if Path("CONTEXT.md").exists() else \
+        (Path(__file__).resolve().parent.parent / "CONTEXT.md").read_text(encoding="utf-8").lower()
+    return {n for n in namen
+            if len(n) >= 4 and not n.isdigit()
+            and not re.search(rf"(?<!\w){re.escape(n.lower())}(?!\w)", glossar)}
+
+
+def _fester_text() -> dict[str, str]:
+    """Was die Seiten fest sagen: Vorlagen ohne Kommentare, Zeichenketten der Routen."""
+    texte: dict[str, str] = {}
+    for v in sorted(VORLAGEN.glob("*.html")):
+        t = _ohne_kommentare(v.read_text(encoding="utf-8"))
+        t = re.sub(r"/\*.*?\*/", " ", t, flags=re.S)
+        texte[f"templates/{v.name}"] = re.sub(r"(?m)^\s*//.*$", "", t)
+    web = VORLAGEN.parent
+    for py in sorted([*(web / "routen").glob("*.py"), web / "basis.py"]):
+        baum = ast.parse(py.read_text(encoding="utf-8"))
+        doku = {id(k.body[0].value) for k in ast.walk(baum)
+                if isinstance(k, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and k.body and isinstance(k.body[0], ast.Expr)
+                and isinstance(k.body[0].value, ast.Constant)}
+        texte[py.relative_to(web).as_posix()] = "\n".join(
+            c.value for c in ast.walk(baum)
+            if isinstance(c, ast.Constant) and isinstance(c.value, str) and id(c) not in doku
+            and not c.value.lstrip().upper().startswith(_SQL))
+    return texte
+
+
+def _einzelfall_funde() -> dict[str, list[str]]:
+    if os.environ.get("FINCTL_TESTDATEN") == "muster":
+        pytest.skip("auf dem Musterhaushalt sind die Namen erfunden und allgemein")
+    namen = _einzelfaelle_aus_config()
+    if not namen:
+        return {}
+    muster = re.compile(r"(?<![\w-])(" + "|".join(
+        re.escape(n) for n in sorted(namen, key=len, reverse=True)) + r")(?![\w-])", re.I)
+    funde: dict[str, list[str]] = {}
+    for datei, text in _fester_text().items():
+        treffer = [" ".join(text[max(0, m.start() - 30):m.end() + 30].split())
+                   for m in muster.finditer(text)]
+        if treffer:
+            funde[datei] = treffer
+    return funde
+
+
+@pytest.mark.parametrize("regel", _mit("einzelfaelle"), ids=_ids)
+def test_fixed_text_names_no_case_of_the_household(regel):
+    """Eine Kennung oder ein Name aus `config/` steht nicht im festen Text.
+
+    Die Ausnahmen fuehren je Datei die Zahl der Treffer, die heute noch
+    stehen -- wie `skript_ohne_html`: sie sinkt, und es kommt keine dazu.
+    """
+    erlaubt = regel["pruefung"]["ausnahmen"]
+    neu = {f"{datei}: {len(t)} Treffer, z. B. …{t[0]}…" for datei, t in _einzelfall_funde().items()
+           if len(t) > erlaubt.get(datei, 0)}
+    assert not neu, (
+        f"{regel['id']}: Dieser Text nennt etwas, das nur dieser Haushalt hat. Es kommt als "
+        "Wert aus `config/` oder dem Hauptbuch, ein Beispiel ist erfunden und neutral:\n  "
+        + "\n  ".join(sorted(neu)))
+
+
+@pytest.mark.parametrize("regel", _mit("einzelfaelle"), ids=_ids)
+def test_a_case_that_is_fixed_lowers_its_number(regel):
+    """Sonst bleibt eine behobene Altlast als Erlaubnis stehen."""
+    funde = _einzelfall_funde()
+    veraltet = [f"{datei}: {n} -> {len(funde.get(datei, []))}"
+                for datei, n in regel["pruefung"]["ausnahmen"].items()
+                if len(funde.get(datei, [])) < n]
+    assert not veraltet, (
+        f"{regel['id']}: in `ausnahmen` (und `offen`) senken oder streichen:\n  "
+        + "\n  ".join(veraltet))
 
 # ---------------------------------------------------------------- Textmenge
 #

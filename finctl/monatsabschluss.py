@@ -136,7 +136,7 @@ def konten(conn: sqlite3.Connection, heute: date, periode: str,
         if _ks.braucht_anker(conn, row["id"]):
             # Ohne Saldo im Export steht der Kontostand in keinem Auszug: einmal abschreiben.
             p.erledigt, p.beleg = False, ""
-            p.hinweis = "Kontostand fehlt: einmal eintragen"
+            p.hinweis = "Stand fehlt: einmal eintragen"
         b = live.get(row["id"])
         if b and b.get("as_of"):
             a = b["as_of"]
@@ -333,6 +333,31 @@ def planung_offen(conn: sqlite3.Connection, heute: date, periode: str) -> list[P
                 hinweis=f"{len(passend)} passende Buchungen, noch nichts zugeordnet",
                 ziel=f"/planung#klammer-{s.id}"))
     return out
+
+
+def planung_doppelt(conn: sqlite3.Connection, periode: str) -> list[Posten]:
+    """Einmalige Planzeilen, zu denen eine eingelesene Buchung passt, die ihnen nicht gehoert.
+
+    Die Buchung zaehlt doppelt: in der Messung und in der Zeile
+    (`szenarien.doppelt_gezaehlt`). Die Zeile verschwindet mit der Zuordnung.
+    """
+    from finctl.forecast import abgleich as ag
+    from finctl.forecast import szenarien as sz
+
+    pfad = CONFIG_DIR / "szenarien.yaml"
+    if not pfad.exists():
+        return []
+    geladen = sz.load(yaml_lesen(pfad) or {})
+    gefunden = sz.doppelt_je_zeile(conn, geladen, ag.fenster(conn))
+    return [Posten(
+        id=f"planung-doppelt:{s.id}:{i}", name=f"{s.name} · {s.lines[i].label}",
+        gruppe="planung", periode=periode,
+        hinweis=(f"{len(passend)} passende "
+                 f"{'Buchung' if len(passend) == 1 else 'Buchungen'}, "
+                 "nicht zugeordnet: zählt doppelt"),
+        ziel=f"/planung#klammer-{s.id}")
+        for s in sz.active(geladen) for i in range(len(s.lines))
+        if (passend := gefunden.get((s.id, i)))]
 
 
 def renten(heute: date, jahr: str) -> list[Posten]:
