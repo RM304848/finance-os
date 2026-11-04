@@ -109,9 +109,20 @@ def _methode(methode: str, params: dict) -> dict:
     return _METHODEN[methode](params)
 
 
+def _utf8(strom: IO[str], **weiter) -> IO[str]:
+    """Das Protokoll ist UTF-8, auch wo die Konsole anders kodiert (Windows: cp1252)."""
+    if hasattr(strom, "reconfigure"):
+        strom.reconfigure(encoding="utf-8", **weiter)
+    return strom
+
+
 def laufen(ein: IO[str] | None = None, aus: IO[str] | None = None) -> None:
     """Lesen, bis der Strom endet. Eine Zeile ist eine Nachricht."""
-    ein, aus = ein or sys.stdin, aus or sys.stdout
+    if ein is None:
+        ein = _utf8(sys.stdin)
+    if aus is None:
+        # Eine Zeile endet mit LF, auch unter Windows, wo Textmodus CRLF schriebe.
+        aus = _utf8(sys.stdout, newline="\n")
     for zeile in ein:
         if not zeile.strip():
             continue

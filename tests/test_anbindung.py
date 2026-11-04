@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import socket
+import traceback
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,18 @@ def _eigene_dateien(tmp_path, monkeypatch):
     an._FREIGABEN.clear()
 
 
+_ORIGINAL = {"connect": socket.socket.connect, "connect_ex": socket.socket.connect_ex,
+             "create_connection": socket.create_connection, "getaddrinfo": socket.getaddrinfo}
+
+
+def _aus_socketpair() -> bool:
+    """Unter Windows baut asyncio sein inneres Rohr mit `socket.socketpair`, das sich
+    ueber 127.0.0.1 mit sich selbst verbindet. Das verlaesst den Prozess nicht."""
+    return any(Path(f.filename).name == "socket.py" and f.name in ("socketpair",
+                                                                   "_fallback_socketpair")
+               for f in traceback.extract_stack())
+
+
 @pytest.fixture
 def netz_gesperrt(monkeypatch):
     """Jeder Versuch, eine Verbindung aufzubauen oder einen Namen aufzuloesen, faellt auf."""
@@ -62,6 +75,8 @@ def netz_gesperrt(monkeypatch):
 
     def sperre(name):
         def _(*args, **kwargs):
+            if _aus_socketpair():
+                return _ORIGINAL[name](*args, **kwargs)
             versuche.append(name)
             raise AssertionError(f"Netzzugriff versucht: {name}")
         return _

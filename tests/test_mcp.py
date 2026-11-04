@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -143,6 +144,20 @@ def test_the_glossary_is_a_resource(pipe):
         "contents"][0]["text"]
     assert "**Klammer**" in text and "**Handentscheidung**" in text
     assert "error" in pipe.senden("resources/read", {"uri": "finctl://nein"})
+
+
+def test_the_stream_is_utf8_where_the_console_is_not():
+    """Unter Windows kodiert die Konsole cp1252. Das Protokoll bleibt UTF-8, und eine
+    Zeile endet mit LF."""
+    p = subprocess.Popen([sys.executable, "-c", "from finctl.cli import app; app()", "mcp"],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         env={**os.environ, "PYTHONIOENCODING": "cp1252"})
+    frage = {"jsonrpc": "2.0", "id": 1, "method": "resources/read",
+             "params": {"uri": "finctl://glossar"}}
+    aus, fehler = p.communicate(json.dumps(frage).encode("utf-8") + b"\n", timeout=30)
+    assert aus.endswith(b"\n") and not aus.endswith(b"\r\n"), fehler
+    text = json.loads(aus.decode("utf-8"))["result"]["contents"][0]["text"]
+    assert any(zeichen in text for zeichen in "äöüß")
 
 
 def test_no_stdout_noise_breaks_the_stream(pipe, monkeypatch):

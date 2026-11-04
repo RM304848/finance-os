@@ -6,7 +6,7 @@ macht daraus beim Veröffentlichen die neue Version.
 
 ## Unveröffentlicht
 
-## 0.6.0 – 2026-11-02
+## 0.6.0 – 2026-11-04
 
 **Auf einen Blick:** Was bisher nur im Texteditor ging, geht jetzt auf den Seiten, und ein
 KI-Modell kann helfen, aber nur, wenn du es willst.
